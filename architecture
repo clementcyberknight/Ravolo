@@ -1,0 +1,128 @@
+# Farville Game Architecture Implementation Plan
+
+This plan outlines the design and implementation of the Farville idle farm RPG, focusing on a robust architecture, secure game logic, and an anti-cheating system.
+
+## Proposed Architecture
+
+- **Frontend**: Expo (React Native) with TypeScript + **Hermes Engine**.
+- **Rendering**: **@shopify/flash-list** - For high-performance, smooth list rendering of inventory/crops.
+- **Local Database**: **WatermelonDB** - High-performance offline-first storage.
+- **WebSocket Server**: **uWebSockets.js** (Self-hosted on a $5 VPS) - Highly optimized, capable of handling 100k+ concurrent connections with minimal memory.
+- **Network Layer**: **Axios** (REST) + **Native WebSockets**.
+- **Background Sync**: **react-native-background-fetch**.
+- **Connectivity**: **@react-native-community/netinfo**.
+- **API State / Caching**: **TanStack Query**.
+- **Key-Value Storage**: **MMKV**.
+- **Backend Services**: Supabase (Postgres, Auth, RLS, Edge Functions).
+
+## WebSocket Strategy (Scale & Cost)
+
+To support 10k concurrent users on a $5/month hosting (e.g., Hetzner/DigitalOcean):
+
+1. **uWebSockets.js**: We will use this instead of Socket.io or standard ws. It is written in C++ with a Node.js wrapper, making it the fastest and most memory-efficient WebSocket implementation available.
+2. **Minimal Payload**: Use Protocol Buffers (protobuf) or highly compressed JSON for social updates and market trades.
+3. **Stateless Logic**: The WS server will be "thin" — it validates the JWT from Supabase Auth and broadcasts messages. Heavy state persistence remains with Postgres.
+4. **Subscription Model**: Users subscribe to "topics" (e.g., `market-prices`, `user-social-notifications`) to avoid broadcast storms.
+
+## Market Price Engine
+
+To keep the economy dynamic and easy to balance:
+
+- **External Feed**: The backend will fetch real-world commodity data (e.g., corn/wheat futures, or even crypto price volatility) to influence in-game crop prices.
+- **Price Broadcast**: Every few minutes, the WebSocket server broadcasts the new `price_multiplier` to all connected clients.
+- **Local Integration**: `WatermelonDB` stores the base price, while the `price_multiplier` from the WS pulse is applied in the UI and during sell transactions.
+
+## WebSocket "Time Pulse"
+
+- **Sync Check**: Every 5–10 seconds, the server sends a `time_pulse` containing the authoritative UTC timestamp.
+- **Drift Correction**: The mobile app compares its local clock to this pulse. If a significant drift is detected (cheating attempt), the app restricts harvesting until a full sync occurs.
+- **Active Growth**: While the app is open, this pulse triggers the "Ready!" UI checks, ensuring the visual state is always perfectly synced with the server's view of time.
+
+- **State Management**:
+  - **Zustand**: UI state (modals, non-persistent toggles).
+  - **WatermelonDB**: Local source of truth for all game entities.
+  - **TanStack Query**: Used _only_ to fetch static configurations (crop data) or trigger syncs.
+
+## Sync Strategy (Offline-First)
+
+- **Push/Pull**: The app works entirely offline. Every X minutes (or on app close/open), it pushes local changes to Supabase and pulls remote changes.
+- **Conflict Resolution**: "Last Write Wins" for most items, but incremental for resources (e.g., coins = coins + change).
+
+## Anti-Cheating (Hybrid Approach)
+
+> [!WARNING]
+> Offline play allows local clock manipulation. We will mitigate this with:
+
+1. **Server-Side Sanity Checks**: During sync, the server reviews the "deltas". If a user gained an impossible amount of XP/Coins in a short time, the sync is flagged.
+2. **Server-Verified Harvests**: Crucial "high-value" actions (like league rewards or rare item crafting) can require a mandatory online pulse to verify timestamps against a trusted network clock.
+3. **Cheat Detection Logic**: Analyze the `created_at` timestamps of local actions. If they are perfectly sequential or weirdly clustered, flag for manual review.
+
+## Proposed Schema
+
+### [MODIFY] `schema.sql` (to be applied via Supabase MCP)
+
+> [!NOTE]
+> All tables will include `id` (uuid), `created_at`, `updated_at`, and `deleted` (boolean) to support WatermelonDB's sync protocol.
+
+#### `profiles`
+
+- `id`: uuid (PK)
+- `username`: text
+- `xp`: integer
+- `coins`: integer
+- `level`: integer
+- `server_synced_at`: timestamp (last time server validated this data)
+
+#### `plots`
+
+- `user_id`: uuid (FK)
+- `crop_id`: uuid
+- `planted_at`: timestamp
+- `growth_boost_active`: boolean
+- `visual_state`: text (calculated locally, e.g., 'seed', 'sprout', 'ready')
+
+## "Blazing Fast" Performance Directives
+
+To achieve a premium, lightweight feel:
+
+1. **Shopify FlashList**: Replaces standard `FlatList` for zero-lag scrolling in inventory and market views.
+2. **Selective Rerenders**: Use Zustand with rigid selective selectors to ensure moving a crop or updating a coin count doesn't re-render the whole farm.
+3. **Asset Optimization**: All game icons will be SVGs or WebP (lossy-compressed) to keep the app bundle small and textures loading instantly.
+4. **Hermes & Static Hermes**: Pre-compile JS to bytecode for near-instant app startup.
+5. **No Logic in UI Thread**: Heavy calculations (like price multiplier math or XP level curves) will happen in the background via WatermelonDB's asynchronous worker.
+
+## Game Logic: Offline-Online Transition
+
+1. **Deterministic Timers**: When a crop is planted locally, WatermelonDB stores `planted_at`. The UI uses `planted_at + crop.growth_duration` to show the "Ready!" text.
+2. **Local Commit**: All actions (planting, harvesting) are committed to WatermelonDB immediately.
+3. **Lazy Sync**: When an internet connection is detected, the `SyncEngine` batches all local changes into a single JSON payload and sends it to a Supabase Edge Function.
+4. **Validation Buffer**: The server processes the payload. If valid, it updates the master DB. If a conflict occurs (e.g., harvest happening before planting on the server side due to clock skew), it returns an "Error" code, and the client rolls back the invalid action.
+
+#### `inventory`
+
+- `user_id`: uuid (FK)
+- `item_type`: text (crop, product, tool)
+- `item_id`: uuid
+- `quantity`: integer
+
+#### `quests`
+
+- `id`: uuid (PK)
+- `user_id`: uuid
+- `type`: text (plant, harvest, sell)
+- `target_amount`: integer
+- `current_amount`: integer
+- `xp_reward`: integer
+- `expires_at`: timestamp
+
+## Verification Plan
+
+### Automated Tests
+
+- Integration tests for harvest validation (can't harvest before growth time).
+- Unit tests for XP/Level calculations.
+
+### Manual Verification
+
+- Walkthrough of the planting-to-selling flow.
+- Performance testing for plot rendering (especially with expansions).
