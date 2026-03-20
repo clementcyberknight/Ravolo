@@ -1,15 +1,26 @@
+import { Image } from "expo-image";
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { FarmGrid } from "@/components/farm-grid";
+import { RanchGrid } from "@/components/ranch-grid";
 import { HomeSubTabs, HomeTabType } from "@/components/home-sub-tabs";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { BottomTabInset } from "@/constants/theme";
+import { useInventoryStore } from "@/stores/inventory-store";
+
+const inventoryIcon = require("@/assets/image/assets_images_icons_misc_box.webp");
+const marketIcon = require("@/assets/image/assets_images_icons_misc_market.webp");
 
 export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState<HomeTabType>("farm");
+
+  // Sum total items in inventory for the badge
+  const totalItems = useInventoryStore((state) =>
+    Object.values(state.items).reduce((acc, item) => acc + item.quantity, 0)
+  );
 
   return (
     <ThemedView style={styles.container}>
@@ -33,11 +44,7 @@ export default function HomeScreen() {
 
           {/* Tab Content */}
           {activeTab === "farm" && <FarmGrid />}
-          {activeTab === "ranch" && (
-            <View style={styles.comingSoon}>
-              <ThemedText>Ranch coming soon...</ThemedText>
-            </View>
-          )}
+          {activeTab === "ranch" && <RanchGrid />}
           {activeTab === "craft" && (
             <View style={styles.comingSoon}>
               <ThemedText>Crafting coming soon...</ThemedText>
@@ -49,6 +56,26 @@ export default function HomeScreen() {
             </View>
           )}
         </ScrollView>
+
+        {/* Floating Action Buttons */}
+        <View style={styles.leftFabContainer}>
+          <Pressable style={styles.fab}>
+            <Image source={marketIcon} style={styles.fabImage} contentFit="contain" />
+            <View style={styles.badgeRed}>
+              <ThemedText style={styles.badgeTextLight}>1</ThemedText>
+            </View>
+          </Pressable>
+        </View>
+
+        <View style={styles.rightFabContainer}>
+          <Pressable style={styles.fab}>
+            <Image source={inventoryIcon} style={styles.fabImage} contentFit="contain" />
+            <View style={styles.badgeGray}>
+              <ThemedText style={styles.badgeTextDark}>{totalItems}</ThemedText>
+            </View>
+          </Pressable>
+        </View>
+
       </SafeAreaView>
     </ThemedView>
   );
@@ -99,5 +126,63 @@ const styles = StyleSheet.create({
   comingSoon: {
     padding: 32,
     alignItems: "center",
+  },
+  leftFabContainer: {
+    position: "absolute",
+    bottom: BottomTabInset + 16,
+    left: 16,
+    zIndex: 10,
+  },
+  rightFabContainer: {
+    position: "absolute",
+    bottom: BottomTabInset + 16,
+    right: 16,
+    zIndex: 10,
+  },
+  fab: {
+    width: 60,
+    height: 60,
+    position: "relative",
+  },
+  fabImage: {
+    width: "100%",
+    height: "100%",
+  },
+  badgeRed: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    backgroundColor: "#F44336",
+    borderRadius: 12,
+    minWidth: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#FFF",
+  },
+  badgeGray: {
+    position: "absolute",
+    bottom: -5,
+    right: -5,
+    backgroundColor: "#DFD8CF",
+    borderRadius: 12,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#FFF",
+  },
+  badgeTextLight: {
+    color: "#FFF",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  badgeTextDark: {
+    color: "#333",
+    fontSize: 11,
+    fontWeight: "800",
   },
 });

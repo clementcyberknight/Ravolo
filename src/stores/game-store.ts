@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
 interface GameState {
   level: number;
@@ -9,6 +9,7 @@ interface GameState {
 
   addXp: (amount: number) => void;
   addCoins: (amount: number) => void;
+  removeCoins: (amount: number) => void;
   addDiamonds: (amount: number) => void;
 }
 
@@ -35,8 +36,10 @@ export const useGameStore = create<GameState>((set) => ({
       return { xp, level, xpToNextLevel };
     }),
 
-  addCoins: (amount) =>
-    set((state) => ({ coins: state.coins + amount })),
+  addCoins: (amount) => set((state) => ({ coins: state.coins + amount })),
+
+  removeCoins: (amount) =>
+    set((state) => ({ coins: Math.max(0, state.coins - amount) })),
 
   addDiamonds: (amount) =>
     set((state) => ({ diamonds: state.diamonds + amount })),

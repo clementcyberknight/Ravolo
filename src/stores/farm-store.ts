@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useInventoryStore } from './inventory-store';
 
 export type PlotStatus = 'empty' | 'planted' | 'ready';
 
@@ -101,12 +102,18 @@ export const useFarmStore = create<FarmState>((set) => ({
     })),
 
   harvestCrop: (id) =>
-    set((state) => ({
-      plots: {
-        ...state.plots,
-        [id]: { ...state.plots[id], status: 'empty', cropId: undefined },
-      },
-    })),
+    set((state) => {
+      const plot = state.plots[id];
+      if (plot && plot.status === 'ready' && plot.cropId) {
+        useInventoryStore.getState().addResource(plot.cropId, 'crop', 1);
+      }
+      return {
+        plots: {
+          ...state.plots,
+          [id]: { ...state.plots[id], status: 'empty', cropId: undefined },
+        },
+      };
+    }),
 
   buyPlot: () =>
     set((state) => {
