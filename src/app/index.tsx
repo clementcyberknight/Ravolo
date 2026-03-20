@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { FarmGrid } from "@/components/farm-grid";
 import { HomeSubTabs, HomeTabType } from "@/components/home-sub-tabs";
 import { RanchGrid } from "@/components/ranch-grid";
+import { CraftingGrid } from "@/components/crafting-grid";
 import { InventoryModal } from "@/components/inventory-modal";
 import { MarketModal } from "@/components/market-modal";
 import { ThemedText } from "@/components/themed-text";
@@ -49,11 +50,7 @@ export default function HomeScreen() {
           {/* Tab Content */}
           {activeTab === "farm" && <FarmGrid />}
           {activeTab === "ranch" && <RanchGrid />}
-          {activeTab === "craft" && (
-            <View style={styles.comingSoon}>
-              <ThemedText>Crafting coming soon...</ThemedText>
-            </View>
-          )}
+          {activeTab === "craft" && <CraftingGrid />}
           {activeTab === "upgrade" && (
             <View style={styles.comingSoon}>
               <ThemedText>Upgrades coming soon...</ThemedText>

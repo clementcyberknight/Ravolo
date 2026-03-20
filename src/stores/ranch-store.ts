@@ -1,139 +1,197 @@
 import { create } from 'zustand';
-import { CropType } from './farm-store';
 import { useInventoryStore } from './inventory-store';
 
-export type AnimalType = 'bee' | 'chicken' | 'cow' | 'goat' | 'pig' | 'sheep' | 'silkworm';
-export type AnimalProduct = 'honey' | 'egg' | 'milk' | 'goat_milk' | 'pork' | 'wool' | 'silk';
+export type FacilityType = 'chicken_coop' | 'cow_shed' | 'pigsty' | 'apiary' | 'goat_farm' | 'sheep_farm' | 'silkworm_house';
 
-export type RanchPlotStatus = 'empty' | 'hungry' | 'producing' | 'ready';
-
-export interface RanchPlot {
-  id: string;
-  status: RanchPlotStatus;
-  animalType?: AnimalType;
+export interface FacilityConfig {
+  id: FacilityType;
+  name: string;
+  description: string;
+  asset: any;
+  product: string;
+  feedId: string;
+  unlockLevel: number;
+  baseProductionTimeSec: number;
 }
 
-export const ANIMAL_CONFIG: Record<AnimalType, {
-  name: string;
-  feedCrop: CropType | null; 
-  product: AnimalProduct;
-  cost: number;
-}> = {
-  // Configured default feeding rules based on standard farm concepts
-  bee: { name: 'Apiary', feedCrop: 'sunflower', product: 'honey', cost: 100 },
-  chicken: { name: 'Chicken Coop', feedCrop: 'corn', product: 'egg', cost: 50 },
-  cow: { name: 'Cow Barn', feedCrop: 'wheat', product: 'milk', cost: 200 },
-  goat: { name: 'Goat Farm', feedCrop: 'wheat', product: 'goat_milk', cost: 150 },
-  pig: { name: 'Pigsty', feedCrop: 'corn', product: 'pork', cost: 120 },
-  sheep: { name: 'Sheep Fold', feedCrop: 'wheat', product: 'wool', cost: 130 },
-  silkworm: { name: 'Silkworm House', feedCrop: 'tea_leaves', product: 'silk', cost: 180 },
+export const FACILITY_CONFIG: Record<FacilityType, FacilityConfig> = {
+  chicken_coop: {
+    id: 'chicken_coop',
+    name: 'Chicken Coop',
+    description: 'Produces eggs regularly',
+    asset: require('@/assets/image/assets_images_icons_animals_chicken_coop.webp'),
+    product: 'egg',
+    feedId: 'corn',
+    unlockLevel: 1,
+    baseProductionTimeSec: 14 * 60, // 14 mins
+  },
+  cow_shed: {
+    id: 'cow_shed',
+    name: 'Cow Shed',
+    description: 'Produces milk regularly',
+    asset: require('@/assets/image/assets_images_icons_animals_cow_shed.webp'),
+    product: 'milk',
+    feedId: 'wheat',
+    unlockLevel: 13,
+    baseProductionTimeSec: 45 * 60,
+  },
+  pigsty: {
+    id: 'pigsty',
+    name: 'Pigsty',
+    description: 'Produces pork regularly',
+    asset: require('@/assets/image/assets_images_icons_animals_pigsty.webp'),
+    product: 'pork',
+    feedId: 'corn',
+    unlockLevel: 25,
+    baseProductionTimeSec: 60 * 60,
+  },
+  apiary: {
+    id: 'apiary',
+    name: 'Apiary',
+    description: 'Produces honey from flowers',
+    asset: require('@/assets/image/assets_images_icons_animals_apiary.webp'),
+    product: 'honey',
+    feedId: 'sunflower',
+    unlockLevel: 18,
+    baseProductionTimeSec: 30 * 60,
+  },
+  goat_farm: {
+    id: 'goat_farm',
+    name: 'Goat Farm',
+    description: 'Produces goat milk',
+    asset: require('@/assets/image/assets_images_icons_animals_goat_farm.webp'),
+    product: 'goat_milk',
+    feedId: 'wheat',
+    unlockLevel: 32,
+    baseProductionTimeSec: 50 * 60,
+  },
+  sheep_farm: {
+    id: 'sheep_farm',
+    name: 'Sheep Farm',
+    description: 'Produces soft wool',
+    asset: require('@/assets/image/assets_images_icons_animals_sheep_farm.webp'),
+    product: 'wool',
+    feedId: 'wheat',
+    unlockLevel: 40,
+    baseProductionTimeSec: 80 * 60, // Wait times exaggerated logic
+  },
+  silkworm_house: {
+    id: 'silkworm_house',
+    name: 'Silkworm House',
+    description: 'Produces fine silk',
+    asset: require('@/assets/image/assets_images_icons_animals_silkworm_house.webp'),
+    product: 'silk',
+    feedId: 'tea_leaves',
+    unlockLevel: 50,
+    baseProductionTimeSec: 120 * 60,
+  }
 };
+
+export interface FacilityState {
+  level: number;
+  feedCount: number;
+  readyCount: number;
+  producingSince: number | null; // Timestamp
+}
 
 interface RanchState {
-  plots: Record<string, RanchPlot>;
-  plotIds: string[];
-  buyRanchPlot: () => void;
-  buyAnimal: (plotId: string, animalType: AnimalType) => boolean;
-  feedAnimal: (plotId: string) => boolean;
-  growAnimal: (plotId: string) => void;
-  collectProduct: (plotId: string) => void;
-  mateAnimals: (animalType: AnimalType) => boolean; 
+  facilities: Record<FacilityType, FacilityState>;
+  
+  feedFacility: (id: FacilityType) => void;
+  collectProduct: (id: FacilityType) => void;
+  upgradeFacility: (id: FacilityType) => void;
 }
 
-const getInitialPlots = () => {
-  const plots: Record<string, RanchPlot> = {};
-  const plotIds: string[] = [];
-  // Initial starting ranch size: 4 plots
-  for (let i = 0; i < 4; i++) {
-    const id = `ranch-plot-${i}`;
-    plotIds.push(id);
-    plots[id] = { id, status: 'empty' };
-  }
-  return { plots, plotIds };
+const initialFacilities: Record<FacilityType, FacilityState> = {
+  chicken_coop: { level: 1, feedCount: 0, readyCount: 0, producingSince: null },
+  cow_shed: { level: 1, feedCount: 0, readyCount: 0, producingSince: null },
+  pigsty: { level: 1, feedCount: 0, readyCount: 0, producingSince: null },
+  apiary: { level: 1, feedCount: 0, readyCount: 0, producingSince: null },
+  goat_farm: { level: 1, feedCount: 0, readyCount: 0, producingSince: null },
+  sheep_farm: { level: 1, feedCount: 0, readyCount: 0, producingSince: null },
+  silkworm_house: { level: 1, feedCount: 0, readyCount: 0, producingSince: null },
 };
 
-const initial = getInitialPlots();
-
 export const useRanchStore = create<RanchState>((set, get) => ({
-  plots: initial.plots,
-  plotIds: initial.plotIds,
+  facilities: initialFacilities,
 
-  buyRanchPlot: () => set((state) => {
-    if (state.plotIds.length >= 16) return state; // Maximum 16 ranch plots for now
-    const newId = `ranch-plot-${Date.now()}`;
-    return {
-      plotIds: [...state.plotIds, newId],
-      plots: { ...state.plots, [newId]: { id: newId, status: 'empty' } },
-    };
-  }),
+  feedFacility: (id) => {
+    const config = FACILITY_CONFIG[id];
+    const inventory = useInventoryStore.getState();
+    const invItem = inventory.items[config.feedId];
+    
+    // Check if player has feed
+    if (invItem && invItem.quantity > 0) {
+      if (inventory.removeResource(config.feedId, 1)) {
+         set((state) => {
+           let newProducingSince = state.facilities[id].producingSince;
+           let feedCount = state.facilities[id].feedCount;
+           
+           if (newProducingSince === null) {
+              newProducingSince = Date.now();
+           } else {
+              feedCount += 1; // Queue up feed if already producing
+           }
 
-  buyAnimal: (plotId, animalType) => {
-    set((state) => ({
-      plots: {
-        ...state.plots,
-        [plotId]: { ...state.plots[plotId], status: 'hungry', animalType },
-      }
-    }));
-    return true;
-  },
-
-  feedAnimal: (plotId) => {
-    const state = get();
-    const plot = state.plots[plotId];
-    if (plot.status !== 'hungry' || !plot.animalType) return false;
-    
-    const config = ANIMAL_CONFIG[plot.animalType];
-    const feedCrop = config.feedCrop;
-    
-    if (feedCrop) {
-      const inventoryStore = useInventoryStore.getState();
-      const removed = inventoryStore.removeResource(feedCrop, 1);
-      if (!removed) return false; // Inventory did not possess the required crop
-    }
-    
-    set((state) => ({
-      plots: {
-        ...state.plots,
-        [plotId]: { ...state.plots[plotId], status: 'producing' }
-      }
-    }));
-    return true;
-  },
-
-  growAnimal: (plotId) => set((state) => ({
-    plots: {
-      ...state.plots,
-      [plotId]: { ...state.plots[plotId], status: 'ready' }
-    }
-  })),
-
-  collectProduct: (plotId) => {
-    const state = get();
-    const plot = state.plots[plotId];
-    if (plot.status !== 'ready' || !plot.animalType) return;
-    
-    const product = ANIMAL_CONFIG[plot.animalType].product;
-    useInventoryStore.getState().addResource(product, 'product', 1);
-    
-    set((state) => ({
-      plots: {
-        ...state.plots,
-        [plotId]: { ...state.plots[plotId], status: 'hungry' } // Cycles back to hungry after collection
-      }
-    }));
-  },
-
-  mateAnimals: (animalType) => {
-    const state = get();
-    const adults = Object.values(state.plots).filter(p => p.animalType === animalType);
-    
-    if (adults.length >= 2) {
-      const emptyPlot = Object.values(state.plots).find(p => p.status === 'empty');
-      if (emptyPlot) {
-        state.buyAnimal(emptyPlot.id, animalType);
-        return true; // Successfully mated and placed new offspring
+           return {
+             facilities: {
+               ...state.facilities,
+               [id]: {
+                 ...state.facilities[id],
+                 feedCount: feedCount,
+                 producingSince: newProducingSince
+               }
+             }
+           };
+         });
       }
     }
-    return false; // Not enough parents or no space
+  },
+
+  collectProduct: (id) => {
+    set((state) => {
+      const fac = state.facilities[id];
+      const config = FACILITY_CONFIG[id];
+      
+      if (fac.readyCount > 0) {
+        // Add to inventory
+        useInventoryStore.getState().addResource(config.product, 'product', fac.readyCount);
+        
+        let newProducingSince = null;
+        let newFeedCount = fac.feedCount;
+
+        // If we have queued feed, immediately start producing again
+        if (newFeedCount > 0) {
+           newProducingSince = Date.now();
+           newFeedCount -= 1;
+        }
+
+        return {
+          facilities: {
+            ...state.facilities,
+            [id]: {
+              ...fac,
+              readyCount: 0,
+              feedCount: newFeedCount,
+              producingSince: newProducingSince
+            }
+          }
+        };
+      }
+      return state;
+    });
+  },
+
+  upgradeFacility: (id) => {
+    // Basic upgrade mock - will cost coins dynamically later
+    set((state) => ({
+      facilities: {
+        ...state.facilities,
+        [id]: {
+          ...state.facilities[id],
+          level: state.facilities[id].level + 1,
+        }
+      }
+    }));
   }
 }));

@@ -4,7 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useInventoryStore } from "@/stores/inventory-store";
 
-const ASSET_MAP: Record<string, any> = {
+export const ASSET_MAP: Record<string, any> = {
   // Crops
   wheat: require("@/assets/image/assets_images_icons_crops_wheat.webp"),
   corn: require("@/assets/image/assets_images_icons_crops_corn.webp"),
@@ -29,10 +29,21 @@ const ASSET_MAP: Record<string, any> = {
   wool: require("@/assets/image/assets_images_icons_animalproducts_wool.webp"),
   silk: require("@/assets/image/assets_images_icons_animalproducts_silk_thread.webp"),
   honey: require("@/assets/image/assets_images_icons_animalproducts_honey.webp"),
+
+  // Crafted Products
+  flour: require("@/assets/image/assets_images_icons_crafts_flour.webp"),
+  cornmeal: require("@/assets/image/assets_images_icons_crafts_cornmeal.webp"),
+  corn_syrup: require("@/assets/image/assets_images_icons_crafts_corn_syrup.webp"),
+  rice_flour: require("@/assets/image/assets_images_icons_crafts_rice_flour.webp"),
+  cornbread: require("@/assets/image/assets_images_icons_crafts_cornbread.webp"),
+  bread: require("@/assets/image/assets_images_icons_crafts_bread.webp"),
+  muffin: require("@/assets/image/assets_images_icons_crafts_corn_muffins.webp"),
 };
 
 const boxIcon = require("@/assets/image/assets_images_icons_misc_box.webp");
 const boostIcon = require("@/assets/image/assets_images_icons_misc_boosts.webp");
+const filterIcon = require("@/assets/icons/Filter--Streamline-Bootstrap.svg");
+const closeIconSvg = require("@/assets/icons/x-close.svg");
 
 interface InventoryModalProps {
   visible: boolean;
@@ -105,7 +116,7 @@ export const InventoryModal = ({ visible, onClose }: InventoryModalProps) => {
               />
             </View>
             <Pressable style={styles.filterButton}>
-              <Text style={styles.filterIcon}>==</Text>
+              <Image source={filterIcon} style={styles.filterSvg} />
             </Pressable>
           </View>
 
@@ -133,7 +144,7 @@ export const InventoryModal = ({ visible, onClose }: InventoryModalProps) => {
         {/* Floating Close Button at Bottom */}
         <View style={[styles.closeContainer, { paddingBottom: insets.bottom + 20 }]}>
           <Pressable style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.closeIcon}>X</Text>
+            <Image source={closeIconSvg} style={styles.closeSvg} contentFit="contain" />
           </Pressable>
         </View>
 
@@ -253,10 +264,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  filterIcon: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#555",
+  filterSvg: {
+    width: 24,
+    height: 24,
+    tintColor: "#555",
   },
   gridContent: {
     flexDirection: "row",
@@ -317,9 +328,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
-  closeIcon: {
-    color: "#FFF",
-    fontSize: 24,
-    fontWeight: "700",
+  closeSvg: {
+    width: 24,
+    height: 24,
+    tintColor: "#FFF",
   },
 });

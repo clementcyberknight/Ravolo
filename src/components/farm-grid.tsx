@@ -146,7 +146,7 @@ export const FarmGrid = memo(function FarmGrid() {
 
   return (
     <View style={styles.gridContainer}>
-      {plotIds.map((id) => (
+      {Array.isArray(plotIds) && plotIds.map((id) => (
         <FarmTile key={id} id={id} />
       ))}
       {plotIds.length < 32 && <BuyPlotTile />}

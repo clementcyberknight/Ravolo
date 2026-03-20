@@ -1,385 +1,452 @@
-import { Image } from 'expo-image';
-import React, { memo, useCallback, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ASSET_MAP } from "@/components/inventory-modal";
+import { useGameStore } from "@/stores/game-store";
+import {
+  FACILITY_CONFIG,
+  FacilityType,
+  useRanchStore,
+} from "@/stores/ranch-store";
+import { Image } from "expo-image";
+import React, { useEffect, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { AnimalProduct, AnimalType, ANIMAL_CONFIG, useRanchStore } from '@/stores/ranch-store';
-import { useGameStore } from '@/stores/game-store';
+const feedSackIcon = require("@/assets/image/assets_images_icons_crafts_chicken_feed.webp");
+const crateIcon = require("@/assets/image/assets_images_icons_misc_delivery_crate.webp");
+const lockIcon = require("@/assets/image/assets_images_icons_misc_lock.webp");
+const diamondIcon = require("@/assets/image/assets_images_icons_misc_diamonds.webp");
+const hourglassIcon = require("@/assets/image/assets_images_icons_misc_hourglass.webp");
 
-const unlockImage = require('@/assets/image/farm-plot-it.png');
-
-const ANIMAL_SHELTER_ASSETS: Record<AnimalType, any> = {
-  bee: require('@/assets/image/assets_images_icons_animals_apiary.webp'),
-  chicken: require('@/assets/image/assets_images_icons_animals_chicken_coop.webp'),
-  cow: require('@/assets/image/cartoon-holstein-cows-in-wooden-barn.png'),
-  goat: require('@/assets/image/assets_images_icons_animals_goat_farm.webp'),
-  pig: require('@/assets/image/assets_images_icons_animals_pigsty.webp'),
-  sheep: require('@/assets/image/gemini_generated_image_9h4act9h4act9h4a.png'),
-  silkworm: require('@/assets/image/assets_images_icons_animals_silkworm_house.webp'),
+const useTick = () => {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
+  return tick;
 };
 
-const SINGLE_ANIMAL_ASSETS: Record<AnimalType, any> = {
-  bee: require('@/assets/image/assets_images_icons_animals_apiary.webp'), // Fallback
-  chicken: require('@/assets/image/single-chick-asset.png'),
-  cow: require('@/assets/image/single-cow-asset.png'),
-  goat: require('@/assets/image/single-goat-asset.png'),
-  pig: require('@/assets/image/single-pig-asset.png'),
-  sheep: require('@/assets/image/single-sheep-asset.png'),
-  silkworm: require('@/assets/image/single-slikworm-asset.png'),
+const formatTime = (seconds: number) => {
+  if (seconds <= 0) return "0s";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 };
 
-const PRODUCT_ASSETS: Record<AnimalProduct, any> = {
-  egg: require('@/assets/image/assets_images_icons_animalproducts_egg.webp'),
-  goat_milk: require('@/assets/image/assets_images_icons_animalproducts_goat_milk.webp'),
-  honey: require('@/assets/image/assets_images_icons_animalproducts_honey.webp'),
-  milk: require('@/assets/image/assets_images_icons_animalproducts_milk.webp'),
-  pork: require('@/assets/image/assets_images_icons_animalproducts_pork.webp'),
-  silk: require('@/assets/image/assets_images_icons_animalproducts_silk_thread.webp'),
-  wool: require('@/assets/image/assets_images_icons_animalproducts_wool.webp'),
-};
-
-interface ShopModalProps {
-  visible: boolean;
-  plotId: string | null;
-  onClose: () => void;
-}
-
-const AnimalShopModal = ({ visible, plotId, onClose }: ShopModalProps) => {
-  const buyAnimal = useRanchStore((state) => state.buyAnimal);
-  const coins = useGameStore((state) => state.coins);
-  const removeCoins = useGameStore((state) => state.removeCoins);
-
-  const handleBuy = (type: AnimalType) => {
-    if (!plotId) return;
-    const config = ANIMAL_CONFIG[type];
-    
-    if (coins >= config.cost) {
-      removeCoins(config.cost);
-      buyAnimal(plotId, type);
-      onClose();
-    }
-  };
-
-  if (!visible) return null;
-
-  return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Animal Shop</Text>
-          <ScrollView contentContainerStyle={styles.shopGrid}>
-            {(Object.keys(ANIMAL_CONFIG) as AnimalType[]).map((type) => {
-              const config = ANIMAL_CONFIG[type];
-              const canAfford = coins >= config.cost;
-
-              return (
-                <Pressable
-                  key={type}
-                  style={[styles.shopItem, !canAfford && styles.shopItemDisabled]}
-                  onPress={() => handleBuy(type)}
-                  disabled={!canAfford}
-                >
-                  <Image
-                    source={SINGLE_ANIMAL_ASSETS[type]}
-                    style={styles.shopImage}
-                    contentFit="contain"
-                    cachePolicy="memory-disk"
-                  />
-                  <Text style={styles.shopItemName}>{config.name}</Text>
-                  <Text style={styles.shopItemCost}>Cost: {config.cost} C</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <Pressable style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.closeText}>Close</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
-};
-
-const RanchTile = memo(function RanchTile({ id, onOpenShop }: { id: string, onOpenShop: (id: string) => void }) {
-  const plot = useRanchStore((state) => state.plots[id]);
-  const feedAnimal = useRanchStore((state) => state.feedAnimal);
-  const growAnimal = useRanchStore((state) => state.growAnimal);
+export const RanchGrid = () => {
+  const tick = useTick();
+  const userLevel = useGameStore((state) => state.xp / 100);
+  const facilitiesState = useRanchStore((state) => state.facilities);
+  const feedFacility = useRanchStore((state) => state.feedFacility);
   const collectProduct = useRanchStore((state) => state.collectProduct);
 
-  const addXp = useGameStore((state) => state.addXp);
+  const facilityKeys = FACILITY_CONFIG
+    ? (Object.keys(FACILITY_CONFIG) as FacilityType[])
+    : [];
 
-  const handlePress = useCallback(() => {
-    if (!plot) return;
-    
-    if (plot.status === 'empty') {
-      onOpenShop(plot.id);
-    } else if (plot.status === 'hungry') {
-      const fed = feedAnimal(plot.id);
-      if (fed) {
-        // Fast mock growth for testing - instantly grow after 2 seconds
-        setTimeout(() => growAnimal(plot.id), 2000);
+  useEffect(() => {
+    const state = useRanchStore.getState();
+    let hasUpdates = false;
+
+    facilityKeys.forEach((id) => {
+      const fac = state.facilities[id];
+      const config = FACILITY_CONFIG[id];
+
+      if (fac.producingSince !== null) {
+        const elapsedMs = Date.now() - fac.producingSince;
+        const totalMsReq = config.baseProductionTimeSec * 1000;
+
+        if (elapsedMs >= totalMsReq) {
+          hasUpdates = true;
+          useRanchStore.setState((s) => {
+            let newProducingSince = null;
+            let newFeedCount = s.facilities[id].feedCount;
+            let newReadyCount = s.facilities[id].readyCount + 1;
+
+            if (newFeedCount > 0) {
+              newFeedCount -= 1;
+              newProducingSince = Date.now();
+            }
+
+            return {
+              facilities: {
+                ...s.facilities,
+                [id]: {
+                  ...s.facilities[id],
+                  producingSince: newProducingSince,
+                  feedCount: newFeedCount,
+                  readyCount: newReadyCount,
+                },
+              },
+            };
+          });
+        }
       }
-    } else if (plot.status === 'ready') {
-      collectProduct(plot.id);
-      addXp(15);
-    }
-  }, [plot, onOpenShop, feedAnimal, growAnimal, collectProduct, addXp]);
-
-  if (!plot) return null;
+    });
+  }, [tick]);
 
   return (
-    <Pressable style={styles.tileWrapper} onPress={handlePress}>
-      <View style={[
-        styles.tileContainer,
-        plot.status === 'empty' ? styles.emptyPlotContainer : null,
-        plot.status === 'ready' ? styles.readyPlotContainer : null,
-      ]}>
-        
-        {plot.status === 'empty' && (
-          <View style={styles.emptyHitbox}>
-            <Text style={{ fontSize: 24, opacity: 0.2 }}>📦</Text>
-          </View>
-        )}
-        
-        {plot.animalType && plot.status !== 'empty' && (
-           <View style={styles.contentFlex}>
-             <Image
-              source={ANIMAL_SHELTER_ASSETS[plot.animalType]}
-              style={styles.shelterImage}
-              contentFit="contain"
-              cachePolicy="memory-disk"
-             />
-             
-             {plot.status === 'hungry' && (
-                <View style={styles.overlayPill}>
-                  <Text style={styles.pillText}>Needs Food!</Text>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.list}>
+        {(() => {
+          const list: React.ReactNode[] = [];
+          if (!facilityKeys || !Array.isArray(facilityKeys)) return null;
+
+          for (const id of facilityKeys) {
+            const config = FACILITY_CONFIG?.[id];
+            const state = facilitiesState?.[id];
+            if (!config || !state) continue;
+
+            const effectiveLevel = Math.max(1, Math.floor(userLevel));
+            const isUnlocked = effectiveLevel >= config.unlockLevel;
+
+            if (!isUnlocked) {
+              list.push(
+                <View key={id} style={[styles.card, styles.cardLocked]}>
+                  <View style={styles.cardHeader}>
+                    <Image
+                      source={config.asset}
+                      style={[styles.facilityImage, styles.imgGrayscale]}
+                      contentFit="contain"
+                    />
+                    <View style={styles.cardHeaderInfo}>
+                      <Text style={[styles.title, styles.textGrayscale]}>
+                        {config.name}
+                      </Text>
+                      <Text style={styles.subtitle}>{config.description}</Text>
+                    </View>
+                    <Image
+                      source={ASSET_MAP[config.product] || feedSackIcon}
+                      style={[styles.smallIcon, styles.imgGrayscale]}
+                      contentFit="contain"
+                    />
+                  </View>
+                  <View style={styles.divider} />
+                  <View style={styles.lockedFooter}>
+                    <Image
+                      source={lockIcon}
+                      style={styles.smallLockIcon}
+                      contentFit="contain"
+                    />
+                    <Text style={styles.lockedText}>
+                      Unlocks at Level {config.unlockLevel}
+                    </Text>
+                  </View>
+                </View>,
+              );
+              continue;
+            }
+
+            let timeRemaining = 0;
+            if (state.producingSince) {
+              const elapsed = (Date.now() - state.producingSince) / 1000;
+              timeRemaining = Math.max(
+                0,
+                config.baseProductionTimeSec - elapsed,
+              );
+            }
+
+            list.push(
+              <Pressable
+                key={id}
+                style={styles.card}
+                onPress={() =>
+                  state.readyCount > 0 ? collectProduct(id) : feedFacility(id)
+                }
+              >
+                <View style={styles.cardHeader}>
+                  <View style={styles.imageBox}>
+                    <Image
+                      source={config.asset}
+                      style={styles.facilityImage}
+                      contentFit="contain"
+                    />
+                  </View>
+                  <View style={styles.cardHeaderInfo}>
+                    <Text style={styles.title}>{config.name}</Text>
+                    <View style={styles.producesRow}>
+                      <Text style={styles.producesText}>Produces</Text>
+                      <Image
+                        source={ASSET_MAP[config.product] || feedSackIcon}
+                        style={styles.inlineProductIcon}
+                        contentFit="contain"
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.statsRight}>
+                    <View style={styles.statBox}>
+                      <Image
+                        source={feedSackIcon}
+                        style={styles.statIcon}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.statValue}>{state.feedCount}</Text>
+                    </View>
+                    <View style={styles.statBox}>
+                      <Image
+                        source={crateIcon}
+                        style={styles.statIcon}
+                        contentFit="contain"
+                      />
+                      <Text
+                        style={[
+                          styles.statValue,
+                          state.readyCount > 0 && { color: "#4CAF50" },
+                        ]}
+                      >
+                        {state.readyCount}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-             )}
-             
-             {plot.status === 'producing' && (
-                <View style={styles.overlayPillBlue}>
-                  <Text style={styles.pillText}>Producing...</Text>
+                <View style={styles.divider} />
+                <View style={styles.cardFooter}>
+                  <Text style={styles.levelText}>Lv.{state.level}</Text>
+                  <View style={styles.timeRow}>
+                    <Image
+                      source={hourglassIcon}
+                      style={styles.hourglassIcon}
+                      contentFit="contain"
+                    />
+                    <Text style={styles.timeText}>
+                      {state.producingSince
+                        ? formatTime(timeRemaining)
+                        : formatTime(config.baseProductionTimeSec)}
+                    </Text>
+                  </View>
+                  <View style={styles.speedUpRow}>
+                    <Image
+                      source={diamondIcon}
+                      style={styles.diamondIcon}
+                      contentFit="contain"
+                    />
+                    <Text style={styles.speedUpText}>2</Text>
+                  </View>
                 </View>
-             )}
-           </View>
-        )}
-        
-        {plot.status === 'ready' && plot.animalType && (
-          <View style={styles.overlayProductIcon}>
-            <Image
-              source={PRODUCT_ASSETS[ANIMAL_CONFIG[plot.animalType].product]}
-              style={{ width: '100%', height: '100%' }}
-              contentFit="contain"
-              cachePolicy="memory-disk"
-            />
-          </View>
-        )}
+                {state.producingSince && (
+                  <View style={styles.progressBarBg}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          width: `${Math.min(100, (1 - timeRemaining / config.baseProductionTimeSec) * 100)}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                )}
+              </Pressable>,
+            );
+          }
+          return list;
+        })()}
       </View>
-    </Pressable>
+    </ScrollView>
   );
-});
-
-const BuyRanchTile = memo(function BuyRanchTile() {
-  const buyRanchPlot = useRanchStore((state) => state.buyRanchPlot);
-
-  return (
-    <Pressable style={styles.tileWrapper} onPress={buyRanchPlot}>
-      <View style={[styles.tileContainer, styles.buyPlotContainer]}>
-        <Image
-          source={unlockImage}
-          style={{ width: '100%', height: '100%' }}
-          contentFit="contain"
-          cachePolicy="memory-disk"
-        />
-      </View>
-    </Pressable>
-  );
-});
-
-export const RanchGrid = memo(function RanchGrid() {
-  const plotIds = useRanchStore((state) => state.plotIds);
-  const [shopVisible, setShopVisible] = useState(false);
-  const [selectedPlot, setSelectedPlot] = useState<string | null>(null);
-
-  const openShop = useCallback((plotId: string) => {
-    setSelectedPlot(plotId);
-    setShopVisible(true);
-  }, []);
-
-  return (
-    <View style={styles.gridContainer}>
-      {plotIds.map((id) => (
-        <RanchTile key={id} id={id} onOpenShop={openShop} />
-      ))}
-      {plotIds.length < 16 && <BuyRanchTile />}
-      <AnimalShopModal
-        visible={shopVisible}
-        plotId={selectedPlot}
-        onClose={() => setShopVisible(false)}
-      />
-    </View>
-  );
-});
+};
 
 const styles = StyleSheet.create({
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  container: {
     padding: 16,
-    justifyContent: 'flex-start',
-    gap: 8,
+    paddingBottom: 150,
   },
-  tileWrapper: {
-    width: '46%', // 2 columns for ranch so they are bigger
-    aspectRatio: 1,
-  },
-  tileContainer: {
-    flex: 1,
-    backgroundColor: '#D7E5C3', // Pastoral grassy green base
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#9EBB7E',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 8,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  emptyPlotContainer: {
-    backgroundColor: 'transparent',
-    borderStyle: 'dashed',
-    borderWidth: 2,
-    borderColor: '#9EBB7E',
-  },
-  emptyHitbox: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  readyPlotContainer: {
-    backgroundColor: '#E8F5E9',
-    borderColor: '#FFD700', // Gold rim
-    borderWidth: 3,
-  },
-  buyPlotContainer: {
-    backgroundColor: '#FAF5EE',
-    opacity: 0.8,
-    borderStyle: 'dashed',
-  },
-  contentFlex: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    position: 'relative',
-  },
-  shelterImage: {
-    width: '100%',
-    height: '100%',
-  },
-  overlayProductIcon: {
-    position: 'absolute',
-    bottom: -10,
-    right: -10,
-    width: 50,
-    height: 50,
-    backgroundColor: '#FFF',
-    borderRadius: 25,
-    borderWidth: 2,
-    borderColor: '#FFD700',
-    padding: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 4,
-  },
-  overlayPill: {
-    position: 'absolute',
-    top: 4,
-    backgroundColor: '#FF5252',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  overlayPillBlue: {
-    position: 'absolute',
-    top: 4,
-    backgroundColor: '#2196F3',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  pillText: {
-    color: '#FFF',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    width: '85%',
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 20,
-    maxHeight: '80%',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#333',
-    textAlign: 'center',
+  topNav: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 16,
   },
-  shopGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 12,
+  navGroup: {
+    flexDirection: "row",
+    gap: 8,
   },
-  shopItem: {
-    width: '46%',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
+  navBtn: {
     borderWidth: 1,
-    borderColor: '#EFEFEF',
-  },
-  shopItemDisabled: {
-    opacity: 0.5,
-  },
-  shopImage: {
-    width: 60,
-    height: 60,
-    marginBottom: 8,
-  },
-  shopItemName: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  shopItemCost: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FF9800',
-  },
-  closeButton: {
-    marginTop: 20,
-    backgroundColor: '#FF5252',
-    paddingVertical: 12,
+    borderColor: "#EAEAEA",
+    backgroundColor: "#FFF",
     borderRadius: 12,
-    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
-  closeText: {
-    color: '#FFF',
+  navBtnActive: {
+    backgroundColor: "#7BC47F",
+    borderColor: "#7BC47F",
+  },
+  navIconTxt: {
     fontSize: 16,
-    fontWeight: '700',
+    color: "#444",
+  },
+  list: {
+    gap: 16,
+  },
+  card: {
+    backgroundColor: "#FFF",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#EDEDED",
+    padding: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.02,
+    shadowRadius: 5,
+    elevation: 1,
+    overflow: "hidden",
+  },
+  cardLocked: {
+    backgroundColor: "#F7F8FA",
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  imageBox: {
+    width: 64,
+    height: 64,
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  facilityImage: {
+    width: 48,
+    height: 48,
+  },
+  imgGrayscale: {
+    opacity: 0.4,
+  },
+  cardHeaderInfo: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#111",
+  },
+  producesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  producesText: {
+    fontSize: 14,
+    color: "#888",
+    marginRight: 6,
+  },
+  inlineProductIcon: {
+    width: 16,
+    height: 16,
+  },
+  textGrayscale: {
+    color: "#999",
+  },
+  subtitle: {
+    fontSize: 13,
+    color: "#AAA",
+    marginTop: 4,
+  },
+  statsRight: {
+    alignItems: "flex-end",
+    gap: 4,
+  },
+  statBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F5F5F5",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 50,
+    justifyContent: "space-between",
+  },
+  statIcon: {
+    width: 16,
+    height: 16,
+    marginRight: 8,
+    opacity: 0.7,
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#444",
+  },
+  smallIcon: {
+    width: 24,
+    height: 24,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#F0F0F0",
+    marginVertical: 16,
+  },
+  cardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  levelText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#555",
+  },
+  timeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  hourglassIcon: {
+    width: 16,
+    height: 16,
+    marginRight: 6,
+  },
+  timeText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111",
+  },
+  speedUpRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  diamondIcon: {
+    width: 16,
+    height: 16,
+    marginRight: 6,
+  },
+  speedUpText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0088CC",
+  },
+  lockedFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  smallLockIcon: {
+    width: 16,
+    height: 16,
+    marginRight: 8,
+    tintColor: "#C0A040",
+  },
+  lockedText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#C0A040",
+  },
+  progressBarBg: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: "#E0E0E0",
+  },
+  progressFill: {
+    height: 4,
+    backgroundColor: "#7BC47F",
   },
 });
