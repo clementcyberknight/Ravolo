@@ -59,7 +59,7 @@ const getRandomCrop = (): CropType => {
 const getInitialPlots = () => {
   const plots: Record<string, FarmPlot> = {};
   const plotIds: string[] = [];
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 32; i++) {
     const randomSeed = Math.random();
     let status: PlotStatus = 'empty';
     if (randomSeed > 0.6) {

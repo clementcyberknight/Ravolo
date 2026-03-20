@@ -64,7 +64,7 @@ export const RECIPES: Record<RecipeId, Recipe> = {
     name: 'Rice Flour',
     durationSec: 810, // 13m 30s
     ingredients: [{ id: 'rice', amount: 2 }],
-    levelRequired: 14,
+    levelRequired: 1,
     xpReward: 8,
     asset: require('@/assets/image/assets_images_icons_crafts_rice_flour.webp'),
   },
@@ -85,7 +85,7 @@ export const RECIPES: Record<RecipeId, Recipe> = {
     name: 'Bread',
     durationSec: 3600, // 1h mock
     ingredients: [{ id: 'flour', amount: 3 }],
-    levelRequired: 2,
+    levelRequired: 1,
     xpReward: 10,
     asset: require('@/assets/image/assets_images_icons_crafts_bread.webp'),
   },
@@ -98,7 +98,7 @@ export const RECIPES: Record<RecipeId, Recipe> = {
       { id: 'cornmeal', amount: 1 },
       { id: 'egg', amount: 2 },
     ],
-    levelRequired: 3,
+    levelRequired: 1,
     xpReward: 15,
     asset: require('@/assets/image/assets_images_icons_crafts_corn_muffins.webp'),
   },

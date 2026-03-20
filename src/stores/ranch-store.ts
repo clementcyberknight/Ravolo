@@ -1,7 +1,14 @@
-import { create } from 'zustand';
-import { useInventoryStore } from './inventory-store';
+import { create } from "zustand";
+import { useInventoryStore } from "./inventory-store";
 
-export type FacilityType = 'chicken_coop' | 'cow_shed' | 'pigsty' | 'apiary' | 'goat_farm' | 'sheep_farm' | 'silkworm_house';
+export type FacilityType =
+  | "chicken_coop"
+  | "cow_shed"
+  | "pigsty"
+  | "apiary"
+  | "goat_farm"
+  | "sheep_farm"
+  | "silkworm_house";
 
 export interface FacilityConfig {
   id: FacilityType;
@@ -16,75 +23,75 @@ export interface FacilityConfig {
 
 export const FACILITY_CONFIG: Record<FacilityType, FacilityConfig> = {
   chicken_coop: {
-    id: 'chicken_coop',
-    name: 'Chicken Coop',
-    description: 'Produces eggs regularly',
-    asset: require('@/assets/image/assets_images_icons_animals_chicken_coop.webp'),
-    product: 'egg',
-    feedId: 'corn',
+    id: "chicken_coop",
+    name: "Chicken Coop",
+    description: "Produces eggs regularly",
+    asset: require("@/assets/image/assets_images_icons_animals_chicken_coop.webp"),
+    product: "egg",
+    feedId: "corn",
     unlockLevel: 1,
     baseProductionTimeSec: 14 * 60, // 14 mins
   },
   cow_shed: {
-    id: 'cow_shed',
-    name: 'Cow Shed',
-    description: 'Produces milk regularly',
-    asset: require('@/assets/image/assets_images_icons_animals_cow_shed.webp'),
-    product: 'milk',
-    feedId: 'wheat',
-    unlockLevel: 13,
+    id: "cow_shed",
+    name: "Cow Shed",
+    description: "Produces milk regularly",
+    asset: require("@/assets/image/cartoon-holstein-cows-in-wooden-barn.png"),
+    product: "milk",
+    feedId: "wheat",
+    unlockLevel: 1,
     baseProductionTimeSec: 45 * 60,
   },
   pigsty: {
-    id: 'pigsty',
-    name: 'Pigsty',
-    description: 'Produces pork regularly',
-    asset: require('@/assets/image/assets_images_icons_animals_pigsty.webp'),
-    product: 'pork',
-    feedId: 'corn',
-    unlockLevel: 25,
+    id: "pigsty",
+    name: "Pigsty",
+    description: "Produces pork regularly",
+    asset: require("@/assets/image/assets_images_icons_animals_pigsty.webp"),
+    product: "pork",
+    feedId: "corn",
+    unlockLevel: 1,
     baseProductionTimeSec: 60 * 60,
   },
   apiary: {
-    id: 'apiary',
-    name: 'Apiary',
-    description: 'Produces honey from flowers',
-    asset: require('@/assets/image/assets_images_icons_animals_apiary.webp'),
-    product: 'honey',
-    feedId: 'sunflower',
-    unlockLevel: 18,
+    id: "apiary",
+    name: "Apiary",
+    description: "Produces honey from flowers",
+    asset: require("@/assets/image/assets_images_icons_animals_apiary.webp"),
+    product: "honey",
+    feedId: "sunflower",
+    unlockLevel: 1,
     baseProductionTimeSec: 30 * 60,
   },
   goat_farm: {
-    id: 'goat_farm',
-    name: 'Goat Farm',
-    description: 'Produces goat milk',
-    asset: require('@/assets/image/assets_images_icons_animals_goat_farm.webp'),
-    product: 'goat_milk',
-    feedId: 'wheat',
-    unlockLevel: 32,
+    id: "goat_farm",
+    name: "Goat Farm",
+    description: "Produces goat milk",
+    asset: require("@/assets/image/assets_images_icons_animals_goat_farm.webp"),
+    product: "goat_milk",
+    feedId: "wheat",
+    unlockLevel: 1,
     baseProductionTimeSec: 50 * 60,
   },
   sheep_farm: {
-    id: 'sheep_farm',
-    name: 'Sheep Farm',
-    description: 'Produces soft wool',
-    asset: require('@/assets/image/assets_images_icons_animals_sheep_farm.webp'),
-    product: 'wool',
-    feedId: 'wheat',
-    unlockLevel: 40,
+    id: "sheep_farm",
+    name: "Sheep Farm",
+    description: "Produces soft wool",
+    asset: require("@/assets/image/gemini_generated_image_9h4act9h4act9h4a.png"),
+    product: "wool",
+    feedId: "wheat",
+    unlockLevel: 1,
     baseProductionTimeSec: 80 * 60, // Wait times exaggerated logic
   },
   silkworm_house: {
-    id: 'silkworm_house',
-    name: 'Silkworm House',
-    description: 'Produces fine silk',
-    asset: require('@/assets/image/assets_images_icons_animals_silkworm_house.webp'),
-    product: 'silk',
-    feedId: 'tea_leaves',
-    unlockLevel: 50,
+    id: "silkworm_house",
+    name: "Silkworm House",
+    description: "Produces fine silk",
+    asset: require("@/assets/image/assets_images_icons_animals_silkworm_house.webp"),
+    product: "silk",
+    feedId: "tea_leaves",
+    unlockLevel: 1,
     baseProductionTimeSec: 120 * 60,
-  }
+  },
 };
 
 export interface FacilityState {
@@ -96,7 +103,7 @@ export interface FacilityState {
 
 interface RanchState {
   facilities: Record<FacilityType, FacilityState>;
-  
+
   feedFacility: (id: FacilityType) => void;
   collectProduct: (id: FacilityType) => void;
   upgradeFacility: (id: FacilityType) => void;
@@ -109,7 +116,12 @@ const initialFacilities: Record<FacilityType, FacilityState> = {
   apiary: { level: 1, feedCount: 0, readyCount: 0, producingSince: null },
   goat_farm: { level: 1, feedCount: 0, readyCount: 0, producingSince: null },
   sheep_farm: { level: 1, feedCount: 0, readyCount: 0, producingSince: null },
-  silkworm_house: { level: 1, feedCount: 0, readyCount: 0, producingSince: null },
+  silkworm_house: {
+    level: 1,
+    feedCount: 0,
+    readyCount: 0,
+    producingSince: null,
+  },
 };
 
 export const useRanchStore = create<RanchState>((set, get) => ({
@@ -119,31 +131,31 @@ export const useRanchStore = create<RanchState>((set, get) => ({
     const config = FACILITY_CONFIG[id];
     const inventory = useInventoryStore.getState();
     const invItem = inventory.items[config.feedId];
-    
+
     // Check if player has feed
     if (invItem && invItem.quantity > 0) {
       if (inventory.removeResource(config.feedId, 1)) {
-         set((state) => {
-           let newProducingSince = state.facilities[id].producingSince;
-           let feedCount = state.facilities[id].feedCount;
-           
-           if (newProducingSince === null) {
-              newProducingSince = Date.now();
-           } else {
-              feedCount += 1; // Queue up feed if already producing
-           }
+        set((state) => {
+          let newProducingSince = state.facilities[id].producingSince;
+          let feedCount = state.facilities[id].feedCount;
 
-           return {
-             facilities: {
-               ...state.facilities,
-               [id]: {
-                 ...state.facilities[id],
-                 feedCount: feedCount,
-                 producingSince: newProducingSince
-               }
-             }
-           };
-         });
+          if (newProducingSince === null) {
+            newProducingSince = Date.now();
+          } else {
+            feedCount += 1; // Queue up feed if already producing
+          }
+
+          return {
+            facilities: {
+              ...state.facilities,
+              [id]: {
+                ...state.facilities[id],
+                feedCount: feedCount,
+                producingSince: newProducingSince,
+              },
+            },
+          };
+        });
       }
     }
   },
@@ -152,18 +164,20 @@ export const useRanchStore = create<RanchState>((set, get) => ({
     set((state) => {
       const fac = state.facilities[id];
       const config = FACILITY_CONFIG[id];
-      
+
       if (fac.readyCount > 0) {
         // Add to inventory
-        useInventoryStore.getState().addResource(config.product, 'product', fac.readyCount);
-        
+        useInventoryStore
+          .getState()
+          .addResource(config.product, "product", fac.readyCount);
+
         let newProducingSince = null;
         let newFeedCount = fac.feedCount;
 
         // If we have queued feed, immediately start producing again
         if (newFeedCount > 0) {
-           newProducingSince = Date.now();
-           newFeedCount -= 1;
+          newProducingSince = Date.now();
+          newFeedCount -= 1;
         }
 
         return {
@@ -173,9 +187,9 @@ export const useRanchStore = create<RanchState>((set, get) => ({
               ...fac,
               readyCount: 0,
               feedCount: newFeedCount,
-              producingSince: newProducingSince
-            }
-          }
+              producingSince: newProducingSince,
+            },
+          },
         };
       }
       return state;
@@ -190,8 +204,8 @@ export const useRanchStore = create<RanchState>((set, get) => ({
         [id]: {
           ...state.facilities[id],
           level: state.facilities[id].level + 1,
-        }
-      }
+        },
+      },
     }));
-  }
+  },
 }));

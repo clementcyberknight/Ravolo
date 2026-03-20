@@ -3,12 +3,12 @@ import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { CraftingGrid } from "@/components/crafting-grid";
 import { FarmGrid } from "@/components/farm-grid";
 import { HomeSubTabs, HomeTabType } from "@/components/home-sub-tabs";
-import { RanchGrid } from "@/components/ranch-grid";
-import { CraftingGrid } from "@/components/crafting-grid";
 import { InventoryModal } from "@/components/inventory-modal";
 import { MarketModal } from "@/components/market-modal";
+import { RanchGrid } from "@/components/ranch-grid";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { BottomTabInset } from "@/constants/theme";
@@ -34,16 +34,6 @@ export default function HomeScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Top Actions Row: Bonus + Boost (Mocking the UI from the screenshot) */}
-          <View style={styles.topActionsRow}>
-            <View style={[styles.actionBadge, styles.bonusBadge]}>
-              <ThemedText style={styles.actionTextBonus}>Bonus +15%</ThemedText>
-            </View>
-            <View style={styles.actionBadge}>
-              <ThemedText style={styles.actionText}>Boost</ThemedText>
-            </View>
-          </View>
-
           {/* Sub Navigation Tabs */}
           <HomeSubTabs activeTab={activeTab} onChangeTab={setActiveTab} />
 
@@ -51,11 +41,6 @@ export default function HomeScreen() {
           {activeTab === "farm" && <FarmGrid />}
           {activeTab === "ranch" && <RanchGrid />}
           {activeTab === "craft" && <CraftingGrid />}
-          {activeTab === "upgrade" && (
-            <View style={styles.comingSoon}>
-              <ThemedText>Upgrades coming soon...</ThemedText>
-            </View>
-          )}
         </ScrollView>
 
         {/* Floating Action Buttons */}
@@ -71,7 +56,10 @@ export default function HomeScreen() {
             </View>
           </Pressable>
 
-          <Pressable style={styles.fab} onPress={() => setInventoryVisible(true)}>
+          <Pressable
+            style={styles.fab}
+            onPress={() => setInventoryVisible(true)}
+          >
             <Image
               source={inventoryIcon}
               style={styles.fabImage}
@@ -106,7 +94,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: BottomTabInset + 160,
+    paddingBottom: BottomTabInset + 60,
   },
   topActionsRow: {
     flexDirection: "row",

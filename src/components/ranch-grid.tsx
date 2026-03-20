@@ -34,7 +34,7 @@ const formatTime = (seconds: number) => {
 
 export const RanchGrid = () => {
   const tick = useTick();
-  const userLevel = useGameStore((state) => state.xp / 100);
+  const userLevel = useGameStore((state) => state.level);
   const facilitiesState = useRanchStore((state) => state.facilities);
   const feedFacility = useRanchStore((state) => state.feedFacility);
   const collectProduct = useRanchStore((state) => state.collectProduct);

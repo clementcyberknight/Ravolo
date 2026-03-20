@@ -266,15 +266,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   slot: {
-    width: 100,
-    height: 140,
+    width: 140,
+    height: 100,
     borderRadius: 16,
     backgroundColor: "#FFF",
     borderWidth: 1,
     borderColor: "#E0E0E0",
     alignItems: "center",
     justifyContent: "center",
-    padding: 10,
+    padding: 8,
   },
   slotReady: {
     backgroundColor: "#E8F5E9",
@@ -290,9 +290,9 @@ const styles = StyleSheet.create({
     borderColor: "#CE93D8",
   },
   itemIcon: {
-    width: 50,
-    height: 50,
-    marginBottom: 8,
+    width: 40,
+    height: 40,
+    marginBottom: 4,
   },
   recipeName: {
     fontSize: 12,
@@ -301,10 +301,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
     color: "#999",
-    marginTop: 4,
+    marginTop: 2,
   },
   statusReady: {
     color: "#4CAF50",
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: "#E0E0E0",
     borderRadius: 2,
-    marginTop: 8,
+    marginTop: 4,
     overflow: "hidden",
   },
   miniProgressFill: {
@@ -330,19 +330,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#888",
     textAlign: "center",
-    marginTop: 4,
+    marginTop: 2,
   },
   holdText: {
     fontSize: 9,
     color: "#BBB",
     textAlign: "center",
-    marginTop: 2,
+    marginTop: 0,
   },
   lockPriceRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   lockPrice: {
     fontSize: 16,

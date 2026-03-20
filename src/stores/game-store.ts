@@ -14,11 +14,11 @@ interface GameState {
 }
 
 export const useGameStore = create<GameState>((set) => ({
-  level: 6,
-  xp: 65,
+  level: 100,
+  xp: 0,
   xpToNextLevel: 100,
-  coins: 125,
-  diamonds: 30,
+  coins: 999999,
+  diamonds: 999999,
 
   addXp: (amount) =>
     set((state) => {
