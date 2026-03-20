@@ -20,12 +20,12 @@ export const ANIMAL_CONFIG: Record<AnimalType, {
   cost: number;
 }> = {
   // Configured default feeding rules based on standard farm concepts
-  bee: { name: 'Apiary', feedCrop: 'lavender', product: 'honey', cost: 100 },
+  bee: { name: 'Apiary', feedCrop: 'sunflower', product: 'honey', cost: 100 },
   chicken: { name: 'Chicken Coop', feedCrop: 'corn', product: 'egg', cost: 50 },
   cow: { name: 'Cow Barn', feedCrop: 'wheat', product: 'milk', cost: 200 },
   goat: { name: 'Goat Farm', feedCrop: 'wheat', product: 'goat_milk', cost: 150 },
-  pig: { name: 'Pigsty', feedCrop: 'potato', product: 'pork', cost: 120 },
-  sheep: { name: 'Sheep Fold', feedCrop: 'oat', product: 'wool', cost: 130 },
+  pig: { name: 'Pigsty', feedCrop: 'corn', product: 'pork', cost: 120 },
+  sheep: { name: 'Sheep Fold', feedCrop: 'wheat', product: 'wool', cost: 130 },
   silkworm: { name: 'Silkworm House', feedCrop: 'tea_leaves', product: 'silk', cost: 180 },
 };
 

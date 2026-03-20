@@ -4,8 +4,10 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { FarmGrid } from "@/components/farm-grid";
-import { RanchGrid } from "@/components/ranch-grid";
 import { HomeSubTabs, HomeTabType } from "@/components/home-sub-tabs";
+import { RanchGrid } from "@/components/ranch-grid";
+import { InventoryModal } from "@/components/inventory-modal";
+import { MarketModal } from "@/components/market-modal";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { BottomTabInset } from "@/constants/theme";
@@ -16,10 +18,12 @@ const marketIcon = require("@/assets/image/assets_images_icons_misc_market.webp"
 
 export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState<HomeTabType>("farm");
+  const [inventoryVisible, setInventoryVisible] = useState(false);
+  const [marketVisible, setMarketVisible] = useState(false);
 
   // Sum total items in inventory for the badge
   const totalItems = useInventoryStore((state) =>
-    Object.values(state.items).reduce((acc, item) => acc + item.quantity, 0)
+    Object.values(state.items).reduce((acc, item) => acc + item.quantity, 0),
   );
 
   return (
@@ -58,25 +62,40 @@ export default function HomeScreen() {
         </ScrollView>
 
         {/* Floating Action Buttons */}
-        <View style={styles.leftFabContainer}>
-          <Pressable style={styles.fab}>
-            <Image source={marketIcon} style={styles.fabImage} contentFit="contain" />
+        <View style={styles.floatingActionsRight}>
+          <Pressable style={styles.fab} onPress={() => setMarketVisible(true)}>
+            <Image
+              source={marketIcon}
+              style={styles.fabImage}
+              contentFit="contain"
+            />
             <View style={styles.badgeRed}>
               <ThemedText style={styles.badgeTextLight}>1</ThemedText>
             </View>
           </Pressable>
-        </View>
 
-        <View style={styles.rightFabContainer}>
-          <Pressable style={styles.fab}>
-            <Image source={inventoryIcon} style={styles.fabImage} contentFit="contain" />
+          <Pressable style={styles.fab} onPress={() => setInventoryVisible(true)}>
+            <Image
+              source={inventoryIcon}
+              style={styles.fabImage}
+              contentFit="contain"
+            />
             <View style={styles.badgeGray}>
               <ThemedText style={styles.badgeTextDark}>{totalItems}</ThemedText>
             </View>
           </Pressable>
         </View>
-
       </SafeAreaView>
+
+      <InventoryModal
+        visible={inventoryVisible}
+        onClose={() => setInventoryVisible(false)}
+      />
+
+      <MarketModal
+        visible={marketVisible}
+        onClose={() => setMarketVisible(false)}
+      />
     </ThemedView>
   );
 }
@@ -90,7 +109,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: BottomTabInset + 20,
+    paddingBottom: BottomTabInset + 160,
   },
   topActionsRow: {
     flexDirection: "row",
@@ -127,17 +146,13 @@ const styles = StyleSheet.create({
     padding: 32,
     alignItems: "center",
   },
-  leftFabContainer: {
+  floatingActionsRight: {
     position: "absolute",
-    bottom: BottomTabInset + 16,
-    left: 16,
-    zIndex: 10,
-  },
-  rightFabContainer: {
-    position: "absolute",
-    bottom: BottomTabInset + 16,
+    bottom: BottomTabInset + 60,
     right: 16,
     zIndex: 10,
+    gap: 16,
+    alignItems: "flex-end",
   },
   fab: {
     width: 60,
