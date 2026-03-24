@@ -1,8 +1,16 @@
+import { useInventoryStore } from "@/stores/inventory-store";
 import { Image } from "expo-image";
 import React, { useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useInventoryStore } from "@/stores/inventory-store";
 
 export const ASSET_MAP: Record<string, any> = {
   // Crops
@@ -42,8 +50,8 @@ export const ASSET_MAP: Record<string, any> = {
 
 const boxIcon = require("@/assets/image/assets_images_icons_misc_box.webp");
 const boostIcon = require("@/assets/image/assets_images_icons_misc_boosts.webp");
-const filterIcon = require("@/assets/icons/Filter--Streamline-Bootstrap.svg");
-const closeIconSvg = require("@/assets/icons/x-close.svg");
+const filterIcon = require("@/assets/inapp-icons/Filter--Streamline-Bootstrap.svg");
+const closeIconSvg = require("@/assets/inapp-icons/x-close.svg");
 
 interface InventoryModalProps {
   visible: boolean;
@@ -56,7 +64,10 @@ export const InventoryModal = ({ visible, onClose }: InventoryModalProps) => {
   const [searchQuery, setSearchQuery] = useState("");
 
   const items = useInventoryStore((state) => state.items);
-  const totalItems = Object.values(items).reduce((acc, item) => acc + item.quantity, 0);
+  const totalItems = Object.values(items).reduce(
+    (acc, item) => acc + item.quantity,
+    0,
+  );
   const maxCapacity = 120; // Hardcoded capacity based on mockup
 
   const filteredItems = Object.values(items)
@@ -69,37 +80,71 @@ export const InventoryModal = ({ visible, onClose }: InventoryModalProps) => {
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        
         {/* Top Segmented Control (Items / Boosts) */}
         <View style={styles.topTabsContainer}>
-          <Pressable 
-            style={[styles.topTab, activeTab === "items" && styles.topTabActive]}
+          <Pressable
+            style={[
+              styles.topTab,
+              activeTab === "items" && styles.topTabActive,
+            ]}
             onPress={() => setActiveTab("items")}
           >
-            <Image source={boxIcon} style={styles.tabIcon} contentFit="contain" />
-            <Text style={[styles.tabText, activeTab === "items" && styles.tabTextActive]}>Items</Text>
+            <Image
+              source={boxIcon}
+              style={styles.tabIcon}
+              contentFit="contain"
+            />
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "items" && styles.tabTextActive,
+              ]}
+            >
+              Items
+            </Text>
           </Pressable>
-          <Pressable 
-            style={[styles.topTab, activeTab === "boosts" && styles.topTabActive]}
+          <Pressable
+            style={[
+              styles.topTab,
+              activeTab === "boosts" && styles.topTabActive,
+            ]}
             onPress={() => setActiveTab("boosts")}
           >
-            <Image source={boostIcon} style={styles.tabIcon} contentFit="contain" />
-            <Text style={[styles.tabText, activeTab === "boosts" && styles.tabTextActive]}>Boosts</Text>
+            <Image
+              source={boostIcon}
+              style={styles.tabIcon}
+              contentFit="contain"
+            />
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "boosts" && styles.tabTextActive,
+              ]}
+            >
+              Boosts
+            </Text>
           </Pressable>
         </View>
 
         {/* Content Body */}
         <View style={styles.contentBody}>
-          
           {/* Header Row */}
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.headerTitle}>Inventory</Text>
-              <Text style={styles.headerSubtitle}>Sell excess items for coins</Text>
+              <Text style={styles.headerSubtitle}>
+                Sell excess items for coins
+              </Text>
             </View>
             <View style={styles.capacityContainer}>
-              <Image source={boxIcon} style={styles.capacityIcon} contentFit="contain" />
-              <Text style={styles.capacityText}>{totalItems}/{maxCapacity}</Text>
+              <Image
+                source={boxIcon}
+                style={styles.capacityIcon}
+                contentFit="contain"
+              />
+              <Text style={styles.capacityText}>
+                {totalItems}/{maxCapacity}
+              </Text>
             </View>
           </View>
 
@@ -107,7 +152,7 @@ export const InventoryModal = ({ visible, onClose }: InventoryModalProps) => {
           <View style={styles.searchRow}>
             <View style={styles.searchBar}>
               <Text style={styles.searchIcon}>🔍</Text>
-              <TextInput 
+              <TextInput
                 style={styles.searchInput}
                 placeholder="Search items..."
                 placeholderTextColor="#999"
@@ -121,13 +166,20 @@ export const InventoryModal = ({ visible, onClose }: InventoryModalProps) => {
           </View>
 
           {/* Grid View */}
-          <ScrollView contentContainerStyle={styles.gridContent} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.gridContent}
+            showsVerticalScrollIndicator={false}
+          >
             {activeTab === "items" ? (
               filteredItems.map((item) => {
                 const asset = ASSET_MAP[item.id] || boxIcon; // fallback to box if undefined
                 return (
                   <View key={item.id} style={styles.itemCard}>
-                    <Image source={asset} style={styles.itemImage} contentFit="contain" />
+                    <Image
+                      source={asset}
+                      style={styles.itemImage}
+                      contentFit="contain"
+                    />
                     <Text style={styles.itemCount}>{item.quantity}</Text>
                   </View>
                 );
@@ -138,16 +190,20 @@ export const InventoryModal = ({ visible, onClose }: InventoryModalProps) => {
               </View>
             )}
           </ScrollView>
-
         </View>
 
         {/* Floating Close Button at Bottom */}
-        <View style={[styles.closeContainer, { paddingBottom: insets.bottom + 20 }]}>
+        <View
+          style={[styles.closeContainer, { paddingBottom: insets.bottom + 20 }]}
+        >
           <Pressable style={styles.closeButton} onPress={onClose}>
-            <Image source={closeIconSvg} style={styles.closeSvg} contentFit="contain" />
+            <Image
+              source={closeIconSvg}
+              style={styles.closeSvg}
+              contentFit="contain"
+            />
           </Pressable>
         </View>
-
       </View>
     </Modal>
   );

@@ -1,6 +1,6 @@
 # Big Harvest MMO - Features for Frontend Integration
 
-This document outlines all the new Addictive MMO features added to the `big-harvest-backend` server, their underlying mechanisms, and the specific WebSocket endpoints the Frontend Dev will need to consume.
+This document outlines all the new Addictive MMO features added to the `ravolo-backend` server, their underlying mechanisms, and the specific WebSocket endpoints the Frontend Dev will need to consume.
 
 ## 1. FOMO Mechanics
 

@@ -12,30 +12,32 @@
 
 ## 🚀 Documentation
 
-- [**Detailed Architecture**](file:///c:/Users/NCC/Documents/big-harvest/architecture.md): Deep dive into the local-first sync, WebSocket strategy, and anti-cheating measures.
-- [**Feature Roadmap**](file:///c:/Users/NCC/Documents/big-harvest/features.md): Comprehensive list of all MMO and FOMO mechanics.
+- [**Detailed Architecture**](file:///c:/Users/NCC/Documents/ravolo/architecture.md): Deep dive into the local-first sync, WebSocket strategy, and anti-cheating measures.
+- [**Feature Roadmap**](file:///c:/Users/NCC/Documents/ravolo/features.md): Comprehensive list of all MMO and FOMO mechanics.
 
 ## 🛠 Tech Stack
 
-| Layer | Technology |
-| :--- | :--- |
-| **Frontend** | React Native (Expo SDK 54), TypeScript |
-| **Persistence** | WatermelonDB (SQLite) |
-| **Networking** | high-frequency WebSockets + Protobuf |
-| **State Management** | Zustand (Client) + TanStack Query (Server) |
-| **Backend** | Supabase (Postgres, Auth, RLS, Edge Functions) |
+| Layer                | Technology                                     |
+| :------------------- | :--------------------------------------------- |
+| **Frontend**         | React Native (Expo SDK 54), TypeScript         |
+| **Persistence**      | WatermelonDB (SQLite)                          |
+| **Networking**       | high-frequency WebSockets + Protobuf           |
+| **State Management** | Zustand (Client) + TanStack Query (Server)     |
+| **Backend**          | Supabase (Postgres, Auth, RLS, Edge Functions) |
 
 ## 🏁 Getting Started
 
 1. **Install dependencies**
+
    ```bash
    npm install
    ```
 
 2. **Start the development server**
+
    ```bash
    npx expo start
    ```
 
 3. **Check out the architecture**
-   Read through [architecture.md](file:///c:/Users/NCC/Documents/big-harvest/architecture.md) to understand the sync logic before making changes to the data layer.
+   Read through [architecture.md](file:///c:/Users/NCC/Documents/ravolo/architecture.md) to understand the sync logic before making changes to the data layer.

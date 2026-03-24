@@ -1,14 +1,26 @@
+import {
+  BUILDINGS_CONFIG,
+  BuildingId,
+  RECIPES,
+  RecipeId,
+} from "@/constants/crafting-config";
+import { useCraftingStore } from "@/stores/crafting-store";
+import { useGameStore } from "@/stores/game-store";
+import { useInventoryStore } from "@/stores/inventory-store";
 import { Image } from "expo-image";
 import React from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useCraftingStore } from "@/stores/crafting-store";
-import { useInventoryStore } from "@/stores/inventory-store";
-import { useGameStore } from "@/stores/game-store";
-import { RECIPES, BUILDINGS_CONFIG, BuildingId, RecipeId } from "@/constants/crafting-config";
 import { ASSET_MAP } from "./inventory-modal";
 
-const closeIconSvg = require("@/assets/icons/x-close.svg");
+const closeIconSvg = require("@/assets/inapp-icons/x-close.svg");
 const clockIcon = require("@/assets/image/assets_images_icons_misc_clock.webp");
 const lightningIcon = require("@/assets/image/assets_images_icons_misc_lightning.webp");
 const lockIcon = require("@/assets/image/assets_images_icons_misc_lock.webp");
@@ -27,7 +39,11 @@ const formatTime = (seconds: number) => {
   return `${s}s`;
 };
 
-export const RecipeModal = ({ visible, onClose, buildingId }: RecipeModalProps) => {
+export const RecipeModal = ({
+  visible,
+  onClose,
+  buildingId,
+}: RecipeModalProps) => {
   const insets = useSafeAreaInsets();
   const userLevel = useGameStore((state) => state.level);
   const inventory = useInventoryStore((state) => state.items);
@@ -37,7 +53,7 @@ export const RecipeModal = ({ visible, onClose, buildingId }: RecipeModalProps) 
 
   const config = BUILDINGS_CONFIG[buildingId];
   const allRecipes = config.recipes.map((id) => RECIPES[id]);
-  
+
   const craftable = allRecipes.filter((r) => r.levelRequired <= userLevel);
   const locked = allRecipes.filter((r) => r.levelRequired > userLevel);
 
@@ -52,16 +68,24 @@ export const RecipeModal = ({ visible, onClose, buildingId }: RecipeModalProps) 
     <Modal visible={visible} transparent animationType="slide">
       <View style={[styles.container, { paddingTop: insets.top + 40 }]}>
         <View style={styles.content}>
-          
           <View style={styles.header}>
-            <Image source={config.asset} style={styles.buildingMiniIcon} contentFit="contain" />
+            <Image
+              source={config.asset}
+              style={styles.buildingMiniIcon}
+              contentFit="contain"
+            />
             <View>
               <Text style={styles.headerTitle}>Select a Recipe</Text>
-              <Text style={styles.headerSubtitle}>Choose an item to craft in this building</Text>
+              <Text style={styles.headerSubtitle}>
+                Choose an item to craft in this building
+              </Text>
             </View>
           </View>
 
-          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
             {/* Craftable Section */}
             {craftable.length > 0 && (
               <>
@@ -72,27 +96,44 @@ export const RecipeModal = ({ visible, onClose, buildingId }: RecipeModalProps) 
                 <View style={styles.grid}>
                   {craftable.map((recipe) => {
                     const canAfford = recipe.ingredients.every(
-                      (ing) => (inventory[ing.id]?.quantity || 0) >= ing.amount
+                      (ing) => (inventory[ing.id]?.quantity || 0) >= ing.amount,
                     );
 
                     return (
-                      <Pressable 
-                        key={recipe.id} 
-                        style={[styles.recipeCard, !canAfford && styles.recipeCardDisabled]}
+                      <Pressable
+                        key={recipe.id}
+                        style={[
+                          styles.recipeCard,
+                          !canAfford && styles.recipeCardDisabled,
+                        ]}
                         onPress={() => handleStartCrafting(recipe.id)}
                       >
                         <View style={styles.cardTop}>
-                          <Image source={recipe.asset} style={styles.recipeIcon} contentFit="contain" />
+                          <Image
+                            source={recipe.asset}
+                            style={styles.recipeIcon}
+                            contentFit="contain"
+                          />
                           <View style={styles.recipeDetails}>
                             <Text style={styles.recipeName}>{recipe.name}</Text>
                             <View style={styles.timeRow}>
-                              <Image source={clockIcon} style={styles.clockIcon} />
-                              <Text style={styles.timeText}>{formatTime(recipe.durationSec)}</Text>
-                              <Image source={lightningIcon} style={styles.lightningIcon} />
+                              <Image
+                                source={clockIcon}
+                                style={styles.clockIcon}
+                              />
+                              <Text style={styles.timeText}>
+                                {formatTime(recipe.durationSec)}
+                              </Text>
+                              <Image
+                                source={lightningIcon}
+                                style={styles.lightningIcon}
+                              />
                             </View>
                           </View>
                           <View style={styles.quantityBadge}>
-                            <Text style={styles.quantityText}>{inventory[recipe.id]?.quantity || 0}</Text>
+                            <Text style={styles.quantityText}>
+                              {inventory[recipe.id]?.quantity || 0}
+                            </Text>
                             <View style={styles.cubeIcon} />
                           </View>
                         </View>
@@ -102,9 +143,24 @@ export const RecipeModal = ({ visible, onClose, buildingId }: RecipeModalProps) 
                             const have = inventory[ing.id]?.quantity || 0;
                             const isMissing = have < ing.amount;
                             return (
-                              <View key={ing.id} style={[styles.ingredientChip, isMissing && styles.ingredientChipMissing]}>
-                                <Image source={ASSET_MAP[ing.id]} style={styles.ingIcon} contentFit="contain" />
-                                <Text style={[styles.ingText, isMissing && styles.ingTextMissing]}>
+                              <View
+                                key={ing.id}
+                                style={[
+                                  styles.ingredientChip,
+                                  isMissing && styles.ingredientChipMissing,
+                                ]}
+                              >
+                                <Image
+                                  source={ASSET_MAP[ing.id]}
+                                  style={styles.ingIcon}
+                                  contentFit="contain"
+                                />
+                                <Text
+                                  style={[
+                                    styles.ingText,
+                                    isMissing && styles.ingTextMissing,
+                                  ]}
+                                >
                                   {have}/{ing.amount}
                                 </Text>
                               </View>
@@ -127,21 +183,40 @@ export const RecipeModal = ({ visible, onClose, buildingId }: RecipeModalProps) 
                 </View>
                 <View style={styles.grid}>
                   {locked.map((recipe) => (
-                    <View key={recipe.id} style={[styles.recipeCard, styles.recipeCardLocked]}>
+                    <View
+                      key={recipe.id}
+                      style={[styles.recipeCard, styles.recipeCardLocked]}
+                    >
                       <View style={styles.cardTop}>
-                        <Image source={recipe.asset} style={[styles.recipeIcon, { opacity: 0.5 }]} contentFit="contain" />
+                        <Image
+                          source={recipe.asset}
+                          style={[styles.recipeIcon, { opacity: 0.5 }]}
+                          contentFit="contain"
+                        />
                         <View style={styles.recipeDetails}>
-                          <Text style={[styles.recipeName, { color: "#999" }]}>{recipe.name}</Text>
+                          <Text style={[styles.recipeName, { color: "#999" }]}>
+                            {recipe.name}
+                          </Text>
                           <View style={styles.timeRow}>
-                            <Image source={clockIcon} style={[styles.clockIcon, { opacity: 0.5 }]} />
-                            <Text style={[styles.timeText, { color: "#AAA" }]}>{formatTime(recipe.durationSec)}</Text>
-                            <Image source={lightningIcon} style={[styles.lightningIcon, { opacity: 0.5 }]} />
+                            <Image
+                              source={clockIcon}
+                              style={[styles.clockIcon, { opacity: 0.5 }]}
+                            />
+                            <Text style={[styles.timeText, { color: "#AAA" }]}>
+                              {formatTime(recipe.durationSec)}
+                            </Text>
+                            <Image
+                              source={lightningIcon}
+                              style={[styles.lightningIcon, { opacity: 0.5 }]}
+                            />
                           </View>
                         </View>
                         <Image source={lockIcon} style={styles.lockIcon} />
                       </View>
                       <View style={styles.lockInfo}>
-                        <Text style={styles.unlockText}>Unlocks at Level {recipe.levelRequired}</Text>
+                        <Text style={styles.unlockText}>
+                          Unlocks at Level {recipe.levelRequired}
+                        </Text>
                       </View>
                     </View>
                   ))}
@@ -153,7 +228,6 @@ export const RecipeModal = ({ visible, onClose, buildingId }: RecipeModalProps) 
           <Pressable style={styles.closeButton} onPress={onClose}>
             <Image source={closeIconSvg} style={styles.closeIcon} />
           </Pressable>
-
         </View>
       </View>
     </Modal>

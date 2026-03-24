@@ -2,10 +2,10 @@ import { Image } from "expo-image";
 import React, { memo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-const farmIcon = require("@/assets/icons/home-tab-icons/Vegetable-Rosemary--Streamline-Ultimate.png");
-const ranchIcon = require("@/assets/icons/home-tab-icons/Range-Cow-1--Streamline-Ultimate.png");
-const craftIcon = require("@/assets/icons/home-tab-icons/Making-Slime-1--Streamline-Ultimate.png");
-const upgradeIcon = require("@/assets/icons/home-tab-icons/Stat-2--Streamline-Rounded-Streamline-Material.png");
+const farmIcon = require("@/assets/inapp-icons/home-tab-icons/Vegetable-Rosemary--Streamline-Ultimate.png");
+const ranchIcon = require("@/assets/inapp-icons/home-tab-icons/Range-Cow-1--Streamline-Ultimate.png");
+const craftIcon = require("@/assets/inapp-icons/home-tab-icons/Making-Slime-1--Streamline-Ultimate.png");
+const upgradeIcon = require("@/assets/inapp-icons/home-tab-icons/Stat-2--Streamline-Rounded-Streamline-Material.png");
 
 export type HomeTabType = "farm" | "ranch" | "craft" | "upgrade";
 

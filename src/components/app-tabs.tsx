@@ -7,22 +7,22 @@ const TAB_CONFIG = [
   {
     name: "index",
     label: "Home",
-    icon: require("@/assets/icons/Farm-Light--Streamline-Phosphor.png"),
+    icon: require("@/assets/inapp-icons/Farm-Light--Streamline-Phosphor.png"),
   },
   {
     name: "coop",
     label: "Coop",
-    icon: require("@/assets/icons/Team-Share-Idea--Streamline-Ultimate.png"),
+    icon: require("@/assets/inapp-icons/Team-Share-Idea--Streamline-Ultimate.png"),
   },
   {
     name: "leaderboard",
     label: "Leaderboard",
-    icon: require("@/assets/icons/Fantasy-Medieval-Roleplay-Game-Party-Leader--Streamline-Ultimate.png"),
+    icon: require("@/assets/inapp-icons/Fantasy-Medieval-Roleplay-Game-Party-Leader--Streamline-Ultimate.png"),
   },
   {
     name: "shop",
     label: "Shop",
-    icon: require("@/assets/icons/Shop-Star-Rating--Streamline-Ultimate.png"),
+    icon: require("@/assets/inapp-icons/Shop-Star-Rating--Streamline-Ultimate.png"),
   },
 ] as const;
 
