@@ -30,7 +30,7 @@ You must prioritize:
 - Zustand (state management)
 - WebSocket (primary communication)
 - REST (authentication only)
-- FlatList (for large lists/grids)
+- FlashList (for large lists/grids)
 
 DO NOT use:
 
@@ -63,7 +63,7 @@ DO NOT mix concerns.
    - Use Zustand selectors
    - Memoize components (React.memo)
 
-2. Use FlatList for grids:
+2. Use FlashList for grids:
    - Enable virtualization
    - Avoid rendering full lists
 
