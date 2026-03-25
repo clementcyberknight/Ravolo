@@ -90,9 +90,12 @@ DO NOT mix concerns.
 - Use soft shadows and rounded corners
 
 - Follow state color system:
-  - Green = Ready
-  - Yellow = Growing
-  - Grey = Empty
+  Dark green: #032018
+  Light green: #DAF8B7
+  Ravolo green: #71B312
+  Ravolo red: #FF383C
+  white: #FFFFFF
+  black: #000000
 
 ---
 
