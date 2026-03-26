@@ -3,7 +3,7 @@ import React, { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useGameStore } from "@/stores/game-store";
+import { useGameStore } from "@/store/game-store";
 
 // Asset paths
 const profileImage = require("@/assets/image/assets_images_icons_misc_farmer_portrait.webp");

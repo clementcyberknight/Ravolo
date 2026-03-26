@@ -4,9 +4,9 @@ import {
   RECIPES,
   RecipeId,
 } from "@/constants/crafting-config";
-import { useCraftingStore } from "@/stores/crafting-store";
-import { useGameStore } from "@/stores/game-store";
-import { useInventoryStore } from "@/stores/inventory-store";
+import { useCraftingStore } from "@/store/crafting-store";
+import { useGameStore } from "@/store/game-store";
+import { useInventoryStore } from "@/store/inventory-store";
 import { Image } from "expo-image";
 import React from "react";
 import {

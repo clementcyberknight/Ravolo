@@ -1,4 +1,4 @@
-import { useInventoryStore } from "@/stores/inventory-store";
+import { useInventoryStore } from "@/store/inventory-store";
 import { Image } from "expo-image";
 import React, { useState } from "react";
 import {

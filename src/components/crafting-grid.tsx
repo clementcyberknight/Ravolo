@@ -3,7 +3,7 @@ import {
   BUILDINGS_CONFIG,
   RECIPES,
 } from "@/constants/crafting-config";
-import { useCraftingStore } from "@/stores/crafting-store";
+import { useCraftingStore } from "@/store/crafting-store";
 import { Image } from "expo-image";
 import React, { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";

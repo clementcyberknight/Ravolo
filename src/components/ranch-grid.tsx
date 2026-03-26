@@ -1,10 +1,10 @@
 import { ASSET_MAP } from "@/components/inventory-modal";
-import { useGameStore } from "@/stores/game-store";
+import { useGameStore } from "@/store/game-store";
 import {
   FACILITY_CONFIG,
   FacilityType,
   useRanchStore,
-} from "@/stores/ranch-store";
+} from "@/store/ranch-store";
 import { Image } from "expo-image";
 import React, { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";

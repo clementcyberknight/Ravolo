@@ -125,7 +125,7 @@ DO NOT mix concerns.
 - Always handle failure responses
 
 - Prevent:
-  - Double actions
+  - Double actions (make use of debounce)
   - Replay actions
   - Invalid state transitions
 
@@ -221,3 +221,38 @@ The app must:
 ---
 
 Think like you are building a real-time trading terminal, not a simple mobile app.
+
+debounce anything that involve backend communication:
+import { useCallback, useRef } from "react";
+
+/\*\*
+
+- Returns a memoized function that will only execute if it hasn't been called
+- within the last `delay` milliseconds.
+-
+- @param callback The function to debounce/throttle
+- @param delay The delay in milliseconds (default 500ms)
+  \*/
+  export function useDebounce<T extends (...args: any[]) => any>(
+  callback: T,
+  delay: number = 500,
+  ): (...args: Parameters<T>) => void {
+  const isCoolingDown = useRef(false);
+
+return useCallback(
+(...args: Parameters<T>) => {
+if (isCoolingDown.current) {
+return;
+}
+
+      isCoolingDown.current = true;
+      callback(...args);
+
+      setTimeout(() => {
+        isCoolingDown.current = false;
+      }, delay);
+    },
+    [callback, delay],
+
+);
+}

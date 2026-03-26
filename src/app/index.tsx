@@ -12,7 +12,7 @@ import { RanchGrid } from "@/components/ranch-grid";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { BottomTabInset } from "@/constants/theme";
-import { useInventoryStore } from "@/stores/inventory-store";
+import { useInventoryStore } from "@/store/inventory-store";
 
 const inventoryIcon = require("@/assets/image/assets_images_icons_misc_box.webp");
 const marketIcon = require("@/assets/image/assets_images_icons_misc_market.webp");

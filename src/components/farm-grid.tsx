@@ -2,8 +2,8 @@ import { Image } from "expo-image";
 import React, { memo, useCallback } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { CropType, useFarmStore } from "@/stores/farm-store";
-import { useGameStore } from "@/stores/game-store";
+import { CropType, useFarmStore } from "@/store/farm-store";
+import { useGameStore } from "@/store/game-store";
 
 const soilImage = require("@/assets/image/Gemini_Generated_Image_a8azi1a8azi1a8az.png");
 const growImage = require("@/assets/image/assets_images_icons_misc_grow.webp");
