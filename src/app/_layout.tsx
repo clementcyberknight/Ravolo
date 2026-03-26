@@ -1,8 +1,9 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import React, { useEffect } from 'react';
-import { useColorScheme, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import * as NavigationBar from 'expo-navigation-bar';
+import { Platform, useColorScheme, View } from 'react-native';
 
 import AppTabs from '@/components/app-tabs';
 import { ProfileHeader } from '@/components/profile-header';
@@ -23,6 +24,14 @@ export default function TabLayout() {
       SplashScreen.hideAsync();
     }
   }, [isHydrated]);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setBackgroundColorAsync('transparent');
+      NavigationBar.setButtonStyleAsync('light');
+      NavigationBar.setPositionAsync('absolute');
+    }
+  }, []);
 
   if (!isHydrated) {
     return null; // Keep splash screen visible while waiting for hydration
