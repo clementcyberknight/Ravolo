@@ -10,12 +10,12 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useSyndicateStore, SyndicateRole, SyndicateActivity } from "@/store/syndicate-store";
+import { useSyndicateStore, SyndicateRole, SyndicateActivity } from "../../store/syndicate-store";
 import { ChevronDown, MessageSquare } from "lucide-react-native";
 import { useRouter } from "expo-router";
 
-import { BottomTabInset, Spacing } from "@/constants/theme";
-import { Syndicate, MOCK_SYNDICATES } from "@/constants/syndicate-mock";
+import { BottomTabInset, Spacing } from "../../constants/theme";
+import { Syndicate, MOCK_SYNDICATES } from "../../constants/syndicate-mock";
 
 const reindeerIcon = require("@/assets/image/assets_images_icons_sanctuary_reindeer.webp");
 const phoenixIcon = require("@/assets/image/assets_images_icons_sanctuary_phoenix.webp");
@@ -81,7 +81,7 @@ export default function SyndicateScreen() {
   // Dashboard State
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
 
-  const filteredSyndicates = MOCK_SYNDICATES.filter((s) =>
+  const filteredSyndicates = MOCK_SYNDICATES.filter((s: Syndicate) =>
     s.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -523,7 +523,7 @@ export default function SyndicateScreen() {
           {filteredSyndicates.length === 0 ? (
             <Text style={styles.noClansText}>No clans found</Text>
           ) : (
-            filteredSyndicates.map((syn, idx) => {
+            filteredSyndicates.map((syn: Syndicate, idx: number) => {
               const isFull = syn.memberCount >= syn.maxMembers;
               const meetsReqs = playerStats.level >= syn.minLevel && playerStats.totalAsset >= syn.minAsset;
               const canJoin = !isFull && syn.status !== "Closed" && meetsReqs;
