@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   },
   floatingActionsRight: {
     position: "absolute",
-    bottom: BottomTabInset + 20,
+    bottom: 20,
     right: 16,
     zIndex: 10,
     gap: 12,
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   },
   floatingActionsLeft: {
     position: "absolute",
-    bottom: BottomTabInset + 20,
+    bottom: 20,
     left: 16,
     zIndex: 10,
     alignItems: "flex-start",

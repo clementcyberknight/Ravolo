@@ -3,21 +3,20 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
+import { Stack } from "expo-router";
 import * as NavigationBar from "expo-navigation-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
-import { Platform, useColorScheme, View } from "react-native";
+import { Platform, useColorScheme } from "react-native";
 
-import AppTabs from "@/components/app-tabs";
 import { OnboardingScreen } from "@/components/onboarding-screen";
-import { ProfileHeader } from "@/components/profile-header";
 import { useAppStore } from "@/store/app-store";
 
 // Keep the native splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
+export default function RootLayout() {
   const colorScheme = useColorScheme();
   const isHydrated = useAppStore((state) => state._hasHydrated);
   const hasCompletedOnboarding = useAppStore(
@@ -26,7 +25,6 @@ export default function TabLayout() {
 
   useEffect(() => {
     if (isHydrated) {
-      // Hide the native splash screen ONLY after hydration
       SplashScreen.hideAsync();
     }
   }, [isHydrated]);
@@ -39,20 +37,36 @@ export default function TabLayout() {
   }, []);
 
   if (!isHydrated) {
-    return null; // Keep splash screen visible while waiting for hydration
+    return null;
+  }
+
+  if (!hasCompletedOnboarding) {
+    return (
+      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+        <StatusBar hidden />
+        <OnboardingScreen />
+      </ThemeProvider>
+    );
   }
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <StatusBar hidden />
-      {!hasCompletedOnboarding ? (
-        <OnboardingScreen />
-      ) : (
-        <View style={{ flex: 1 }}>
-          <ProfileHeader />
-          <AppTabs />
-        </View>
-      )}
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: "slide_from_right",
+        }}
+      >
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen 
+          name="syndicate-chat" 
+          options={{
+            presentation: "card",
+            animation: "slide_from_bottom",
+          }} 
+        />
+      </Stack>
     </ThemeProvider>
   );
 }
