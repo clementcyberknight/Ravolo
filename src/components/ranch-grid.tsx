@@ -250,7 +250,7 @@ export const RanchGrid = () => {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    paddingBottom: 150,
+    paddingBottom: 10,
   },
   topNav: {
     flexDirection: "row",

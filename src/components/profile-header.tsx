@@ -186,7 +186,7 @@ export const ProfileHeader = memo(function ProfileHeader() {
   const xpProgress = xpToNextLevel > 0 ? xp / xpToNextLevel : 0;
 
   return (
-    <View style={[styles.wrapper, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
+    <View style={[styles.wrapper, { paddingTop: Math.max(insets.top, 20) + 4 }]}>
       {/* Left: avatar + level */}
       <View style={styles.leftSection}>
         <XpRing progress={xpProgress} />
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingBottom: 4,
     backgroundColor: "#fff",
   },
   leftSection: {

@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CraftingGrid } from "@/components/crafting-grid";
 import { FarmGrid } from "@/components/farm-grid";
-import { HomeSubTabs, HomeTabType } from "@/components/home-sub-tabs";
+import { SubTabs } from "@/components/sub-tabs";
 import { InventoryModal } from "@/components/inventory-modal";
 import { MarketModal } from "@/components/market-modal";
 import { RanchGrid } from "@/components/ranch-grid";
@@ -26,6 +26,18 @@ const cropAssets: Record<string, any> = {
   carrot: require("@/assets/image/assets_images_icons_crops_carrot.webp"),
 };
 
+const farmIcon = require("@/assets/inapp-icons/home-tab-icons/Vegetable-Rosemary--Streamline-Ultimate.png");
+const ranchIcon = require("@/assets/inapp-icons/home-tab-icons/Range-Cow-1--Streamline-Ultimate.png");
+const craftIcon = require("@/assets/inapp-icons/home-tab-icons/Making-Slime-1--Streamline-Ultimate.png");
+
+type HomeTabType = "farm" | "ranch" | "craft";
+
+const HOME_TABS = [
+  { id: "farm", icon: farmIcon },
+  { id: "ranch", icon: ranchIcon },
+  { id: "craft", icon: craftIcon },
+];
+
 export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState<HomeTabType>("farm");
   const [inventoryVisible, setInventoryVisible] = useState(false);
@@ -33,7 +45,6 @@ export default function HomeScreen() {
   const [seedSelectorVisible, setSeedSelectorVisible] = useState(false);
 
   const selectedCropId = useFarmStore((state) => state.selectedCropId);
-  const setSelectedCropId = useFarmStore((state) => state.setSelectedCropId);
 
   // Sum total items in inventory for the badge
   const totalItems = useInventoryStore((state) =>
@@ -51,7 +62,11 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* Sub Navigation Tabs */}
-          <HomeSubTabs activeTab={activeTab} onChangeTab={setActiveTab} />
+          <SubTabs
+            tabs={HOME_TABS}
+            activeTabId={activeTab}
+            onTabPress={(id) => setActiveTab(id as HomeTabType)}
+          />
 
           {/* Tab Content */}
           {activeTab === "farm" && <FarmGrid />}
@@ -138,7 +153,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: BottomTabInset + 60,
+    paddingBottom: BottomTabInset,
   },
   topActionsRow: {
     flexDirection: "row",

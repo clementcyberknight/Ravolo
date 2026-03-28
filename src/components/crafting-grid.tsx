@@ -195,7 +195,7 @@ export const CraftingGrid = () => {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    paddingBottom: 120,
+    paddingBottom: 20,
   },
   list: {
     gap: 16,

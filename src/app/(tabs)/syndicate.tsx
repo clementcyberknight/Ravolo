@@ -1,21 +1,30 @@
-import { Search, ChevronLeft } from "lucide-react-native";
+import { Image } from "expo-image";
+import { useRouter } from "expo-router";
+import {
+  ChevronDown,
+  ChevronLeft,
+  MessageSquare,
+  Search,
+  Shield,
+} from "lucide-react-native";
 import React, { useState } from "react";
 import {
+  ScrollView,
   StyleSheet,
-  View,
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
+  View,
 } from "react-native";
-import { Image } from "expo-image";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useSyndicateStore, SyndicateRole, SyndicateActivity } from "../../store/syndicate-store";
-import { ChevronDown, MessageSquare } from "lucide-react-native";
-import { useRouter } from "expo-router";
+import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
+import { useSyndicateStore } from "../../store/syndicate-store";
+import { ScreenHeader } from "@/components/screen-header";
+import { SubTabs } from "@/components/sub-tabs";
+import { ThemedView } from "@/components/themed-view";
+import { Plus } from "lucide-react-native";
 
-import { BottomTabInset, Spacing } from "../../constants/theme";
-import { Syndicate, MOCK_SYNDICATES } from "../../constants/syndicate-mock";
+import { MOCK_SYNDICATES, Syndicate } from "../../constants/syndicate-mock";
+import { BottomTabInset } from "../../constants/theme";
 
 const reindeerIcon = require("@/assets/image/assets_images_icons_sanctuary_reindeer.webp");
 const phoenixIcon = require("@/assets/image/assets_images_icons_sanctuary_phoenix.webp");
@@ -42,6 +51,14 @@ const berryIcon = require("@/assets/image/assets_images_icons_areaitems_berries.
 
 type Tab = "dashboard" | "bank" | "war" | "idol" | "roster";
 
+const SYNDICATE_TABS = [
+  { id: "dashboard", label: "DASHBOARD" },
+  { id: "bank", label: "BANK" },
+  { id: "war", label: "WAR" },
+  { id: "idol", label: "IDOL" },
+  { id: "roster", label: "ROSTER" },
+];
+
 interface CropShare {
   name: string;
   image: any;
@@ -53,15 +70,37 @@ interface CropShare {
 }
 
 const CROPS: CropShare[] = [
-  { name: "Carrot", image: carrotIcon, share: 51, priceMove: 4.2, monopoly: true, hint: "sell", vaultQty: 340 },
-  { name: "Corn", image: cornIcon, share: 28, priceMove: -1.8, monopoly: false, hint: "buy", vaultQty: 120 },
-  { name: "Berry", image: berryIcon, share: 15, priceMove: 0.5, monopoly: false, hint: "hold", vaultQty: 85 },
+  {
+    name: "Carrot",
+    image: carrotIcon,
+    share: 51,
+    priceMove: 4.2,
+    monopoly: true,
+    hint: "sell",
+    vaultQty: 340,
+  },
+  {
+    name: "Corn",
+    image: cornIcon,
+    share: 28,
+    priceMove: -1.8,
+    monopoly: false,
+    hint: "buy",
+    vaultQty: 120,
+  },
+  {
+    name: "Berry",
+    image: berryIcon,
+    share: 15,
+    priceMove: 0.5,
+    monopoly: false,
+    hint: "hold",
+    vaultQty: 85,
+  },
 ];
 
 export default function SyndicateScreen() {
   const insets = useSafeAreaInsets();
-  const topPadding = Math.max(insets.top, 20) + 8;
-
   const { joinedSyndicate, joinSyndicate, _hasHydrated } = useSyndicateStore();
   const router = useRouter();
 
@@ -69,7 +108,6 @@ export default function SyndicateScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [joinedMessage, setJoinedMessage] = useState<string | null>(null);
 
-  // Creation Form State
   const [isCreating, setIsCreating] = useState(false);
   const [selectedLogo, setSelectedLogo] = useState(CLAN_LOGOS[0]);
   const [name, setName] = useState("");
@@ -78,284 +116,262 @@ export default function SyndicateScreen() {
   const [minLevel, setMinLevel] = useState("1");
   const [minGold, setMinGold] = useState("0");
 
-  // Dashboard State
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
 
   const filteredSyndicates = MOCK_SYNDICATES.filter((s: Syndicate) =>
-    s.name.toLowerCase().includes(searchQuery.toLowerCase())
+    s.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  // MOCK STATS for requirement checking to match provided logic
   const playerStats = { level: 12, totalAsset: 50 };
 
   if (!_hasHydrated) return null;
 
+  // ── SYNDICATE DETAIL VIEW ─────────────────────────────────────────────────
   if (selectedSyndicate) {
     const isFull = selectedSyndicate.memberCount >= selectedSyndicate.maxMembers;
-    const meetsReqs = playerStats.level >= selectedSyndicate.minLevel && playerStats.totalAsset >= selectedSyndicate.minAsset;
+    const meetsReqs =
+      playerStats.level >= selectedSyndicate.minLevel &&
+      playerStats.totalAsset >= selectedSyndicate.minAsset;
     const canJoin = !isFull && selectedSyndicate.status !== "Closed" && meetsReqs;
 
     return (
-      <View style={[styles.container, { paddingTop: topPadding }]}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Back Button */}
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setSelectedSyndicate(null)}
+      <ThemedView style={styles.container}>
+        <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
+          <ScreenHeader
+            title="SYNDICATE"
+            onBackPress={() => setSelectedSyndicate(null)}
+          />
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
           >
-            <ChevronLeft color="#032018" size={20} />
-            <Text style={styles.backText}>Back</Text>
-          </TouchableOpacity>
+            {/* Profile Header */}
+            <View style={styles.profileHeaderRow}>
+              <View style={styles.profileAvatarBox}>
+                <Image
+                  source={
+                    selectedSyndicate.name.toLowerCase().includes("phoenix") ||
+                    selectedSyndicate.rank % 2 === 0
+                      ? peacockIcon
+                      : alpacaIcon
+                  }
+                  style={styles.profileAvatarImage}
+                  contentFit="contain"
+                />
+              </View>
 
-          {/* Profile Header (Avatar Left, Info Right) */}
-          <View style={styles.profileHeaderRow}>
-            <View style={styles.profileAvatarBox}>
-              <Image
-                source={
-                  selectedSyndicate.name.toLowerCase().includes("phoenix") ||
-                  selectedSyndicate.rank % 2 === 0
-                    ? peacockIcon
-                    : alpacaIcon
-                }
-                style={styles.profileAvatarImage}
-                contentFit="contain"
-              />
-            </View>
-
-            <View style={styles.profileHeaderRight}>
-              <View style={styles.profileRankRow}>
-                <Text style={styles.rankText}>Rank #{selectedSyndicate.rank}</Text>
-                {/* Top Join Button */}
-                {!joinedMessage?.includes(selectedSyndicate.name) && (
-                  <TouchableOpacity
-                    style={[
-                      styles.joinBtnSmall,
-                      !canJoin && styles.fullBtn
-                    ]}
-                    disabled={!canJoin}
-                    onPress={() => {
-                      joinSyndicate({
-                        id: selectedSyndicate.id,
-                        name: selectedSyndicate.name,
-                        rank: selectedSyndicate.rank,
-                        logo: phoenixIcon,
-                        role: "Initiate",
-                        wealth: 8420,
-                        memberCount: selectedSyndicate.memberCount + 1,
-                        maxMembers: selectedSyndicate.maxMembers,
-                        season: "Season 4 · Rise of Roots",
-                      });
-                      setJoinedMessage(`You joined ${selectedSyndicate.name}!`);
-                      setSelectedSyndicate(null);
-                    }}
-                  >
-                    <Text style={[
-                      styles.joinBtnText,
-                      !canJoin && styles.fullBtnText
-                    ]}>
-                      {isFull ? "Full" : canJoin ? "Join" : "Locked"}
+              <View style={styles.profileHeaderRight}>
+                <View style={styles.profileRankRow}>
+                  <View style={styles.rankBadgeLarge}>
+                    <Text style={styles.rankBadgeLargeText}>
+                      Rank #{selectedSyndicate.rank}
                     </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Requirements Next to Avatar */}
-              <View style={styles.clanReqRowProfile}>
-                <View>
-                  <Text style={styles.reqLabel}>Min Level</Text>
-                  <Text style={styles.reqValueLarge}>{selectedSyndicate.minLevel}</Text>
+                  </View>
+                  {!joinedMessage?.includes(selectedSyndicate.name) && (
+                    <TouchableOpacity
+                      style={[styles.joinBtnSmall, !canJoin && styles.fullBtn]}
+                      disabled={!canJoin}
+                      onPress={() => {
+                        joinSyndicate({
+                          id: selectedSyndicate.id,
+                          name: selectedSyndicate.name,
+                          rank: selectedSyndicate.rank,
+                          logo: phoenixIcon,
+                          role: "Initiate",
+                          wealth: 8420,
+                          memberCount: selectedSyndicate.memberCount + 1,
+                          maxMembers: selectedSyndicate.maxMembers,
+                          season: "Season 4 · Rise of Roots",
+                        });
+                        setJoinedMessage(`You joined ${selectedSyndicate.name}!`);
+                        setSelectedSyndicate(null);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.joinBtnText,
+                          !canJoin && styles.fullBtnText,
+                        ]}
+                      >
+                        {isFull ? "Full" : canJoin ? "Join" : "Locked"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-                <View>
-                  <Text style={styles.reqLabel}>Min Asset</Text>
-                  <Text style={styles.reqValueLarge}>{selectedSyndicate.minAsset}</Text>
+
+                <View style={styles.clanReqRowProfile}>
+                  <View style={styles.reqBlock}>
+                    <Text style={styles.reqLabel}>Min Level</Text>
+                    <Text style={styles.reqValueLarge}>
+                      {selectedSyndicate.minLevel}
+                    </Text>
+                  </View>
+                  <View style={styles.reqDivider} />
+                  <View style={styles.reqBlock}>
+                    <Text style={styles.reqLabel}>Min Asset</Text>
+                    <Text style={styles.reqValueLarge}>
+                      {selectedSyndicate.minAsset}
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
-          </View>
 
-          {/* Clan Name directly under the header block */}
-          <Text style={styles.profileNameLarge}>{selectedSyndicate.name}</Text>
+            <Text style={styles.profileNameLarge}>{selectedSyndicate.name}</Text>
 
-          {/* Description */}
-          <View style={styles.card}>
-            <Text style={styles.descriptionText}>
-              {selectedSyndicate.description}
-            </Text>
-          </View>
-
-          {/* Stats Grid */}
-          <View style={styles.statsRow}>
-            <View style={[styles.card, styles.statCardCentered]}>
-              <Text style={styles.reqLabel}>Members</Text>
-              <Text style={styles.statValue}>
-                {selectedSyndicate.memberCount}/{selectedSyndicate.maxMembers}
+            <View style={styles.card}>
+              <Text style={styles.descriptionText}>
+                {selectedSyndicate.description}
               </Text>
             </View>
-            <View style={[styles.card, styles.statCardCentered]}>
-              <Text style={styles.reqLabel}>Status</Text>
-              <Text style={styles.statValue}>{selectedSyndicate.status}</Text>
-            </View>
-          </View>
 
-          {/* Members List */}
-          <View style={{ marginTop: 8 }}>
-            <Text style={styles.sectionTitle}>
-              Members ({selectedSyndicate.memberCount})
-            </Text>
-            <View style={styles.membersListCard}>
-              {selectedSyndicate.members.map((member, idx) => (
-                <View
-                  key={member.id}
-                  style={[
-                    styles.memberRow,
-                    idx > 0 && styles.memberRowBorder,
-                  ]}
-                >
-                  <View style={styles.memberInfo}>
-                    <View style={styles.memberAvatar}>
-                      <Text style={styles.memberInitial}>{member.initial}</Text>
-                    </View>
-                    <View>
-                      <Text style={styles.memberName}>{member.name}</Text>
-                      <Text style={styles.memberRole}>{member.role}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.memberLevel}>Lv.{member.level}</Text>
-                </View>
-              ))}
+            <View style={styles.statsRow}>
+              <View style={[styles.card, styles.statCardCentered]}>
+                <Text style={styles.reqLabel}>Members</Text>
+                <Text style={styles.statValue}>
+                  {selectedSyndicate.memberCount}
+                  <Text style={styles.statValueMuted}>
+                    /{selectedSyndicate.maxMembers}
+                  </Text>
+                </Text>
+              </View>
+              <View style={[styles.card, styles.statCardCentered]}>
+                <Text style={styles.reqLabel}>Status</Text>
+                <Text style={styles.statValue}>{selectedSyndicate.status}</Text>
+              </View>
             </View>
-          </View>
-        </ScrollView>
-      </View>
+
+            <View>
+              <Text style={styles.sectionTitle}>
+                Members ({selectedSyndicate.memberCount})
+              </Text>
+              <View style={styles.membersListCard}>
+                {selectedSyndicate.members.map((member, idx) => (
+                  <View
+                    key={member.id}
+                    style={[styles.memberRow, idx > 0 && styles.memberRowBorder]}
+                  >
+                    <View style={styles.memberInfo}>
+                      <View style={styles.memberAvatar}>
+                        <Text style={styles.memberInitial}>{member.initial}</Text>
+                      </View>
+                      <View>
+                        <Text style={styles.memberName}>{member.name}</Text>
+                        <Text style={styles.memberRole}>{member.role}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.memberLevel}>Lv.{member.level}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </ThemedView>
     );
   }
 
-  // --- Create Mode View ---
+  // ── CREATE VIEW ───────────────────────────────────────────────────────────
   if (isCreating) {
     const isNameValid = name.trim().length >= 3;
-    
+
     return (
-      <View style={[styles.container, { paddingTop: topPadding }]}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Back Button */}
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setIsCreating(false)}
+      <ThemedView style={styles.container}>
+        <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
+          <ScreenHeader
+            title="CREATE CLAN"
+            onBackPress={() => setIsCreating(false)}
+          />
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
           >
-            <ChevronLeft color="#032018" size={20} />
-            <Text style={styles.backText}>Cancel</Text>
-          </TouchableOpacity>
+            <Text style={styles.profileNameLarge}>Create Clan</Text>
 
-          <Text style={styles.profileNameLarge}>Create Clan</Text>
+            <View style={styles.card}>
+              <Text style={styles.cardSectionLabel}>Clan Logo</Text>
+              <View style={styles.logoGrid}>
+                {CLAN_LOGOS.map((logo, index) => {
+                  const isSelected = selectedLogo === logo;
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      onPress={() => setSelectedLogo(logo)}
+                      style={[
+                        styles.logoOption,
+                        isSelected && styles.logoOptionSelected,
+                      ]}
+                    >
+                      <Image
+                        source={logo}
+                        style={{ width: 36, height: 36 }}
+                        contentFit="contain"
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
 
-          {/* Logo Picker */}
-          <View style={styles.card}>
-            <Text style={styles.reqLabel}>Clan Logo</Text>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 12, justifyContent: "space-between" }}>
-              {CLAN_LOGOS.map((logo, index) => {
-                const isSelected = selectedLogo === logo;
-                return (
-                  <TouchableOpacity
-                    key={index}
-                    onPress={() => setSelectedLogo(logo)}
-                    style={{
-                      width: 50,
-                      height: 50,
-                      backgroundColor: isSelected ? "rgba(113, 179, 18, 0.2)" : "#F8F9FA",
-                      borderRadius: 12,
-                      justifyContent: "center",
-                      alignItems: "center",
-                      borderWidth: 2,
-                      borderColor: isSelected ? "#032018" : "transparent"
-                    }}
+            <View style={styles.card}>
+              <Text style={styles.cardSectionLabel}>Clan Name (3–28 chars)</Text>
+              <TextInput
+                style={styles.inputField}
+                value={name}
+                onChangeText={setName}
+                placeholder="e.g. Grain Ghosts"
+                placeholderTextColor="rgba(3, 32, 24, 0.35)"
+                maxLength={28}
+              />
+              <Text style={[styles.cardSectionLabel, { marginTop: 18 }]}>
+                Description (optional)
+              </Text>
+              <TextInput
+                style={[
+                  styles.inputField,
+                  { height: 80, textAlignVertical: "top" },
+                ]}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Describe your clan..."
+                placeholderTextColor="rgba(3, 32, 24, 0.35)"
+                multiline
+                maxLength={240}
+              />
+            </View>
+
+            <View style={styles.card}>
+              <Text style={styles.cardSectionLabel}>Visibility</Text>
+              <View style={styles.radioRow}>
+                <TouchableOpacity
+                  style={[styles.radioBtn, isPublic && styles.radioBtnActive]}
+                  onPress={() => setIsPublic(true)}
+                >
+                  <Text
+                    style={[styles.radioText, isPublic && styles.radioTextActive]}
                   >
-                    <Image source={logo} style={{ width: 36, height: 36 }} contentFit="contain" />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Basis Info */}
-          <View style={styles.card}>
-            <Text style={styles.reqLabel}>Clan Name (3-28 chars)</Text>
-            <TextInput
-              style={styles.inputField}
-              value={name}
-              onChangeText={setName}
-              placeholder="e.g. Grain Ghosts"
-              placeholderTextColor="rgba(3, 32, 24, 0.4)"
-              maxLength={28}
-            />
-
-            <Text style={[styles.reqLabel, { marginTop: 16 }]}>
-              Description (Optional)
-            </Text>
-            <TextInput
-              style={[
-                styles.inputField,
-                { height: 80, textAlignVertical: "top" },
-              ]}
-              value={description}
-              onChangeText={setDescription}
-              placeholder="Describe your clan..."
-              placeholderTextColor="rgba(3, 32, 24, 0.4)"
-              multiline
-              maxLength={240}
-            />
-          </View>
-
-          {/* Preferences */}
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Preferences</Text>
-
-            <View style={{ flexDirection: "row", gap: 16, marginBottom: 20 }}>
-              <TouchableOpacity
-                style={[styles.radioBtn, isPublic && styles.radioBtnActive]}
-                onPress={() => setIsPublic(true)}
-              >
-                <Text
-                  style={[styles.radioText, isPublic && styles.radioTextActive]}
+                    Public
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.radioBtn, !isPublic && styles.radioBtnActive]}
+                  onPress={() => setIsPublic(false)}
                 >
-                  Public
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.radioBtn, !isPublic && styles.radioBtnActive]}
-                onPress={() => setIsPublic(false)}
-              >
-                <Text
-                  style={[
-                    styles.radioText,
-                    !isPublic && styles.radioTextActive,
-                  ]}
-                >
-                  Private
-                </Text>
-              </TouchableOpacity>
-            </View>
+                  <Text
+                    style={[
+                      styles.radioText,
+                      !isPublic && styles.radioTextActive,
+                    ]}
+                  >
+                    Private
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
-            <View style={{ gap: 16 }}>
-              <View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 6,
-                    marginBottom: 4,
-                  }}
-                >
-                  <Image
-                    source={crownIcon}
-                    style={{ width: 16, height: 16 }}
-                  />
-                  <Text style={styles.reqLabel}>Min Level Preference</Text>
+              <View style={styles.inputGroup}>
+                <View style={styles.inputLabelRow}>
+                  <Image source={crownIcon} style={{ width: 14, height: 14 }} />
+                  <Text style={styles.cardSectionLabel}>Min Level</Text>
                 </View>
                 <TextInput
                   style={styles.inputField}
@@ -363,23 +379,14 @@ export default function SyndicateScreen() {
                   onChangeText={setMinLevel}
                   keyboardType="numeric"
                   placeholder="1"
+                  placeholderTextColor="rgba(3, 32, 24, 0.35)"
                 />
               </View>
 
-              <View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 6,
-                    marginBottom: 4,
-                  }}
-                >
-                  <Image
-                    source={coinsIcon}
-                    style={{ width: 16, height: 16 }}
-                  />
-                  <Text style={styles.reqLabel}>Min Gold Preference</Text>
+              <View style={styles.inputGroup}>
+                <View style={styles.inputLabelRow}>
+                  <Image source={coinsIcon} style={{ width: 14, height: 14 }} />
+                  <Text style={styles.cardSectionLabel}>Min Gold</Text>
                 </View>
                 <TextInput
                   style={styles.inputField}
@@ -387,202 +394,227 @@ export default function SyndicateScreen() {
                   onChangeText={setMinGold}
                   keyboardType="numeric"
                   placeholder="0"
+                  placeholderTextColor="rgba(3, 32, 24, 0.35)"
                 />
               </View>
             </View>
-          </View>
 
-          <TouchableOpacity
-            style={[
-              styles.createSubmitBtn,
-              !isNameValid && { opacity: 0.5 },
-            ]}
-            disabled={!isNameValid}
-            onPress={() => {
-              setJoinedMessage(`Created clan: ${name.trim()}`);
-              joinSyndicate({
-                id: Math.random().toString(),
-                name: name.trim(),
-                rank: 99,
-                logo: selectedLogo,
-                role: "Grandmaster",
-                wealth: 0,
-                memberCount: 1,
-                maxMembers: 25,
-                season: "Season 4 · Start",
-              });
-              setIsCreating(false);
-              setName("");
-              setDescription("");
-            }}
-          >
-            <Text style={styles.createSubmitText}>
-              Create
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
+            <TouchableOpacity
+              style={[styles.createSubmitBtn, !isNameValid && { opacity: 0.45 }]}
+              disabled={!isNameValid}
+              onPress={() => {
+                setJoinedMessage(`Created clan: ${name.trim()}`);
+                joinSyndicate({
+                  id: Math.random().toString(),
+                  name: name.trim(),
+                  rank: 99,
+                  logo: selectedLogo,
+                  role: "Grandmaster",
+                  wealth: 0,
+                  memberCount: 1,
+                  maxMembers: 25,
+                  season: "Season 4 · Start",
+                });
+                setIsCreating(false);
+                setName("");
+                setDescription("");
+              }}
+            >
+              <Text style={styles.createSubmitText}>Create Clan</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </SafeAreaView>
+      </ThemedView>
     );
   }
 
-  // --- Dashboard View (Joined) ---
+  // ── DASHBOARD VIEW ────────────────────────────────────────────────────────
   if (joinedSyndicate) {
-
     return (
-      <View style={[styles.container, { paddingTop: topPadding }]}>
-        <View style={styles.dashboardHeader}>
-          <View style={styles.dashIdentity}>
-            <View style={styles.dashLogoBox}>
-              <Image source={joinedSyndicate.logo} style={{ width: 32, height: 32 }} contentFit="contain" />
-            </View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Text style={styles.dashTitle}>{joinedSyndicate.name}</Text>
-                <View style={styles.rankBadge}>
-                  <Text style={styles.rankBadgeText}>#{joinedSyndicate.rank}</Text>
+      <ThemedView style={styles.container}>
+        <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
+          <ScreenHeader
+            title={joinedSyndicate.name.toUpperCase()}
+            renderRight={() => (
+              <TouchableOpacity
+                style={styles.chatEntryBtn}
+                onPress={() => router.push("/syndicate-chat")}
+              >
+                <MessageSquare size={17} color="#032018" />
+              </TouchableOpacity>
+            )}
+          />
+
+          <View style={styles.dashHeaderExtension}>
+            {/* Identity Row */}
+            <View style={styles.dashIdentity}>
+              <View style={styles.dashLogoBox}>
+                <Image
+                  source={joinedSyndicate.logo}
+                  style={{ width: 30, height: 30 }}
+                  contentFit="contain"
+                />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <View style={styles.dashTitleRow}>
+                  <View style={styles.rankBadge}>
+                    <Text style={styles.rankBadgeText}>
+                      #{joinedSyndicate.rank}
+                    </Text>
+                  </View>
+                  <Text style={styles.dashSubtitle}>
+                    {joinedSyndicate.season}
+                  </Text>
                 </View>
               </View>
-              <Text style={styles.dashSubtitle}>{joinedSyndicate.season}</Text>
             </View>
-            <TouchableOpacity style={styles.chatEntryBtn} onPress={() => router.push("/syndicate-chat")}>
-              <MessageSquare size={18} color="#032018" />
-            </TouchableOpacity>
+
+            {/* Buff Pills */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 6, paddingRight: 4, paddingBottom: 12 }}
+            >
+              <View style={[styles.pill, styles.pillActive]}>
+                <Text style={styles.pillTextActive}>Craft +12%</Text>
+              </View>
+              <View style={[styles.pill, styles.pillActive]}>
+                <Text style={styles.pillTextActive}>Econ +8%</Text>
+              </View>
+              <View style={styles.pill}>
+                <Text style={styles.pillText}>Yield +5%</Text>
+              </View>
+            </ScrollView>
           </View>
 
-          {/* Buff Strip */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.buffStrip} contentContainerStyle={{ gap: 8 }}>
-            <View style={[styles.pill, styles.pillActive]}><Text style={styles.pillTextActive}>Craft +12%</Text></View>
-            <View style={[styles.pill, styles.pillActive]}><Text style={styles.pillTextActive}>Econ +8%</Text></View>
-            <View style={styles.pill}><Text style={styles.pillText}>Yield +5%</Text></View>
-          </ScrollView>
-
           {/* Tab Bar */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroll} contentContainerStyle={{ gap: 4 }}>
-            {(["dashboard", "bank", "war", "idol", "roster"] as Tab[]).map((t) => (
-              <TouchableOpacity
-                key={t}
-                style={[styles.tabBtn, activeTab === t && styles.tabBtnActive]}
-                onPress={() => setActiveTab(t)}
-              >
-                <Text style={[styles.tabBtnText, activeTab === t && styles.tabBtnTextActive]}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+          <SubTabs
+            tabs={SYNDICATE_TABS}
+            activeTabId={activeTab}
+            onTabPress={(id) => setActiveTab(id as Tab)}
+          />
 
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {activeTab === "dashboard" && <DashboardContent />}
-          {activeTab === "bank" && <BankContent />}
-          {activeTab === "war" && <WarContent />}
-          {activeTab === "idol" && <IdolContent />}
-          {activeTab === "roster" && <RosterContent />}
-        </ScrollView>
-      </View>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {activeTab === "dashboard" && <DashboardContent />}
+            {activeTab === "bank" && <BankContent />}
+            {activeTab === "war" && <WarContent />}
+            {activeTab === "idol" && <IdolContent />}
+            {activeTab === "roster" && <RosterContent />}
+          </ScrollView>
+        </SafeAreaView>
+      </ThemedView>
     );
   }
 
-  // --- Search List View ---
+  // ── SEARCH / LIST VIEW ────────────────────────────────────────────────────
   return (
-    <View style={[styles.container, { paddingTop: topPadding }]}>
-      {/* Header */}
-      <View style={styles.headerRow}>
-        <Text style={styles.headerTitle}>Clans</Text>
-        <TouchableOpacity style={styles.createBtn} onPress={() => setIsCreating(true)}>
-          <Text style={styles.createBtnText}>+ Create</Text>
-        </TouchableOpacity>
-      </View>
-
-
-      {/* Search Box */}
-      <View style={styles.searchBox}>
-        <Search size={16} color="rgba(3, 32, 24, 0.5)" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search clans..."
-          placeholderTextColor="rgba(3, 32, 24, 0.5)"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-
-      {/* Banner */}
-      {joinedMessage && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>{joinedMessage}</Text>
-        </View>
-      )}
-
-      {/* List */}
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.listContainer}>
-          {filteredSyndicates.length === 0 ? (
-            <Text style={styles.noClansText}>No clans found</Text>
-          ) : (
-            filteredSyndicates.map((syn: Syndicate, idx: number) => {
-              const isFull = syn.memberCount >= syn.maxMembers;
-              const meetsReqs = playerStats.level >= syn.minLevel && playerStats.totalAsset >= syn.minAsset;
-              const canJoin = !isFull && syn.status !== "Closed" && meetsReqs;
-
-              return (
-                <TouchableOpacity
-                  key={syn.id}
-                  style={styles.clanCard}
-                  onPress={() => setSelectedSyndicate(syn)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.clanAvatar}>
-                    <Image
-                      source={idx % 2 === 0 ? peacockIcon : alpacaIcon}
-                      style={styles.clanAvatarImage}
-                      contentFit="contain"
-                    />
-                  </View>
-                  <View style={styles.clanInfo}>
-                    <View style={styles.clanNameRow}>
-                      <Text style={styles.clanName} numberOfLines={1}>
-                        {syn.name}
-                      </Text>
-                      <Text style={styles.rankText}>Rank #{syn.rank}</Text>
-                    </View>
-                    <Text style={styles.clanMembersText}>
-                      {syn.memberCount}/{syn.maxMembers} members
-                    </Text>
-                    <View style={styles.clanReqRow}>
-                      <Text style={styles.clanReqText}>Lv.{syn.minLevel}+</Text>
-                      <Text style={styles.clanReqText}>Asset {syn.minAsset}+</Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={[
-                      styles.joinBtnSmall,
-                      !canJoin && styles.fullBtn
-                    ]}
-                    disabled={!canJoin}
-                    onPress={() => setJoinedMessage(`You joined ${syn.name}!`)}
-                  >
-                    <Text style={[
-                      styles.joinBtnText,
-                      !canJoin && styles.fullBtnText
-                    ]}>
-                      {isFull ? "Full" : canJoin ? "Join" : "Locked"}
-                    </Text>
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              );
-            })
+    <ThemedView style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
+        <ScreenHeader
+          title="CLANS"
+          renderRight={() => (
+            <TouchableOpacity
+              style={styles.createBtnHeader}
+              onPress={() => setIsCreating(true)}
+            >
+              <Plus size={18} color="#032018" />
+            </TouchableOpacity>
           )}
+        />
+
+        <View style={styles.searchBox}>
+          <Search size={15} color="rgba(3, 32, 24, 0.4)" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search clans..."
+            placeholderTextColor="rgba(3, 32, 24, 0.4)"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
         </View>
-      </ScrollView>
-    </View>
+
+        {joinedMessage && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>{joinedMessage}</Text>
+          </View>
+        )}
+
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.listContainer}>
+            {filteredSyndicates.length === 0 ? (
+              <Text style={styles.noClansText}>No clans found</Text>
+            ) : (
+              filteredSyndicates.map((syn: Syndicate, idx: number) => {
+                const isFull = syn.memberCount >= syn.maxMembers;
+                const meetsReqs =
+                  playerStats.level >= syn.minLevel &&
+                  playerStats.totalAsset >= syn.minAsset;
+                const canJoin = !isFull && syn.status !== "Closed" && meetsReqs;
+
+                return (
+                  <TouchableOpacity
+                    key={syn.id}
+                    style={styles.clanCard}
+                    onPress={() => setSelectedSyndicate(syn)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={styles.clanAvatar}>
+                      <Image
+                        source={idx % 2 === 0 ? peacockIcon : alpacaIcon}
+                        style={styles.clanAvatarImage}
+                        contentFit="contain"
+                      />
+                    </View>
+                    <View style={styles.clanInfo}>
+                      <View style={styles.clanNameRow}>
+                        <Text style={styles.clanName} numberOfLines={1}>
+                          {syn.name}
+                        </Text>
+                        <Text style={styles.rankText}>#{syn.rank}</Text>
+                      </View>
+                      <Text style={styles.clanMembersText}>
+                        {syn.memberCount}/{syn.maxMembers} members
+                      </Text>
+                      <View style={styles.clanReqRow}>
+                        <Text style={styles.clanReqText}>Lv.{syn.minLevel}+</Text>
+                        <Text style={styles.clanReqSep}>·</Text>
+                        <Text style={styles.clanReqText}>
+                          Asset {syn.minAsset}+
+                        </Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.joinBtnSmall, !canJoin && styles.fullBtn]}
+                      disabled={!canJoin}
+                      onPress={() => setJoinedMessage(`You joined ${syn.name}!`)}
+                    >
+                      <Text
+                        style={[
+                          styles.joinBtnText,
+                          !canJoin && styles.fullBtnText,
+                        ]}
+                      >
+                        {isFull ? "Full" : canJoin ? "Join" : "Locked"}
+                      </Text>
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </ThemedView>
   );
 }
 
-// ─── Sub-Components ──────────────────────────────────────────
+// ─── Sub-Components ──────────────────────────────────────────────────────────
 
 function DashboardContent() {
   const { joinedSyndicate } = useSyndicateStore();
@@ -590,64 +622,123 @@ function DashboardContent() {
 
   return (
     <View style={styles.tabContainer}>
+      {/* Wealth + Members */}
       <View style={styles.statsRow}>
-        <View style={[styles.card, { flex: 1 }]}>
+        <View style={[styles.card, styles.statCard]}>
           <Text style={styles.reqLabel}>Wealth</Text>
-          <Text style={styles.statValue}>${joinedSyndicate.wealth.toLocaleString()}</Text>
+          <Text style={styles.statValue}>
+            ${joinedSyndicate.wealth.toLocaleString()}
+          </Text>
+          <Text style={styles.statSub}>Season total</Text>
         </View>
-        <View style={[styles.card, { flex: 1 }]}>
+        <View style={[styles.card, styles.statCard]}>
           <Text style={styles.reqLabel}>Members</Text>
-          <Text style={styles.statValue}>{joinedSyndicate.memberCount}/{joinedSyndicate.maxMembers}</Text>
+          <Text style={styles.statValue}>
+            {joinedSyndicate.memberCount}
+            <Text style={styles.statValueMuted}>
+              /{joinedSyndicate.maxMembers}
+            </Text>
+          </Text>
+          <Text style={styles.statSub}>
+            {joinedSyndicate.maxMembers - joinedSyndicate.memberCount} slots
+            open
+          </Text>
         </View>
       </View>
 
+      {/* Commodity Board */}
       <View style={styles.card}>
-        <View style={styles.cardHeader}>
+        <View style={styles.cardHeaderRow}>
           <Text style={styles.cardTitle}>Commodity Board</Text>
-          <ChevronDown size={16} color="#032018" opacity={0.5} />
+          <ChevronDown size={15} color="rgba(3,32,24,0.4)" />
         </View>
-        <View style={{ gap: 12, marginTop: 12 }}>
-          {CROPS.map((crop) => (
-            <View key={crop.name} style={styles.commodityRow}>
-              <View style={styles.commodityInfo}>
-                <Image source={crop.image} style={{ width: 28, height: 28 }} contentFit="contain" />
-                <View style={{ marginLeft: 10 }}>
-                  <Text style={styles.commodityName}>{crop.name}</Text>
-                  <Text style={styles.commodityStats}>{crop.share}% Syndicate Share</Text>
-                </View>
+
+        {CROPS.map((crop, i) => (
+          <View
+            key={crop.name}
+            style={[
+              styles.commodityRow,
+              i < CROPS.length - 1 && styles.commodityRowBorder,
+            ]}
+          >
+            <View style={styles.cropIconWrap}>
+              <Image
+                source={crop.image}
+                style={{ width: 26, height: 26 }}
+                contentFit="contain"
+              />
+            </View>
+            <View style={styles.cropInfo}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
+                <Text style={styles.commodityName}>{crop.name}</Text>
+                {crop.monopoly && (
+                  <View style={styles.monopolyTag}>
+                    <Text style={styles.monopolyText}>MONOPOLY</Text>
+                  </View>
+                )}
               </View>
-              <View style={{ alignItems: "flex-end" }}>
-                <Text style={[styles.priceMove, { color: crop.priceMove > 0 ? "#71B312" : "#FF383C" }]}>
-                  {crop.priceMove > 0 ? "+" : ""}{crop.priceMove}%
-                </Text>
-                <View style={[styles.hintPill, crop.hint === "sell" ? styles.sellHint : crop.hint === "buy" ? styles.buyHint : styles.holdHint]}>
-                  <Text style={styles.hintText}>{crop.hint.toUpperCase()}</Text>
-                </View>
+              <Text style={styles.commodityStats}>
+                {crop.share}% Syndicate Share
+              </Text>
+            </View>
+            <View style={styles.cropRight}>
+              <Text
+                style={[
+                  styles.priceMove,
+                  { color: crop.priceMove > 0 ? "#71B312" : "#FF383C" },
+                ]}
+              >
+                {crop.priceMove > 0 ? "+" : ""}
+                {crop.priceMove}%
+              </Text>
+              <View
+                style={[
+                  styles.hintPill,
+                  crop.hint === "sell"
+                    ? styles.sellHint
+                    : crop.hint === "buy"
+                      ? styles.buyHint
+                      : styles.holdHint,
+                ]}
+              >
+                <Text style={styles.hintText}>{crop.hint.toUpperCase()}</Text>
               </View>
             </View>
-          ))}
-        </View>
+          </View>
+        ))}
       </View>
 
+      {/* Active Roster */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Active Roster</Text>
-        <View style={{ gap: 10, marginTop: 12 }}>
-          <View style={styles.miniMemberRow}>
-            <View style={[styles.statusDot, { backgroundColor: "#71B312" }]} />
-            <Text style={styles.miniMemberName}>Satoshi_Grind</Text>
-            <Text style={styles.miniMemberRole}>Grandmaster</Text>
-          </View>
-          <View style={styles.miniMemberRow}>
-            <View style={[styles.statusDot, { backgroundColor: "#71B312" }]} />
-            <Text style={styles.miniMemberName}>CropCommander</Text>
-            <Text style={styles.miniMemberRole}>Enforcer</Text>
-          </View>
-          <View style={styles.miniMemberRow}>
-            <View style={[styles.statusDot, { backgroundColor: "#FFB038" }]} />
-            <Text style={styles.miniMemberName}>YieldHunter</Text>
-            <Text style={styles.miniMemberRole}>Enforcer</Text>
-          </View>
+        <View style={styles.cardHeaderRow}>
+          <Text style={styles.cardTitle}>Active Roster</Text>
+          <Text style={styles.cardAction}>View all</Text>
         </View>
+
+        {[
+          { name: "Satoshi_Grind", role: "Grandmaster", online: true },
+          { name: "CropCommander", role: "Enforcer", online: true },
+          { name: "YieldHunter", role: "Enforcer", online: false },
+        ].map((m, i, arr) => (
+          <View
+            key={m.name}
+            style={[
+              styles.miniMemberRow,
+              i < arr.length - 1 && styles.miniMemberBorder,
+            ]}
+          >
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: m.online ? "#71B312" : "#FFB038" },
+              ]}
+            />
+            <Text style={styles.miniMemberName}>{m.name}</Text>
+            <Text style={styles.miniMemberRole}>{m.role}</Text>
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -671,14 +762,29 @@ function BankContent() {
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Deposit Assets</Text>
-        <View style={{ gap: 8, marginTop: 12 }}>
-          {CROPS.map((crop) => (
-            <View key={crop.name} style={styles.depositRow}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Image source={crop.image} style={{ width: 24, height: 24 }} />
+        <View style={{ gap: 2, marginTop: 12 }}>
+          {CROPS.map((crop, i) => (
+            <View
+              key={crop.name}
+              style={[
+                styles.depositRow,
+                i < CROPS.length - 1 && {
+                  borderBottomWidth: 1,
+                  borderBottomColor: "rgba(3,32,24,0.06)",
+                },
+              ]}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+              >
+                <Image
+                  source={crop.image}
+                  style={{ width: 24, height: 24 }}
+                  contentFit="contain"
+                />
                 <Text style={styles.depositName}>{crop.name}</Text>
               </View>
-              <Text style={styles.depositQty}>{crop.vaultQty} in Vault</Text>
+              <Text style={styles.depositQty}>{crop.vaultQty} in vault</Text>
               <TouchableOpacity style={styles.depositBtn}>
                 <Text style={styles.depositBtnText}>+</Text>
               </TouchableOpacity>
@@ -697,6 +803,7 @@ function WarContent() {
         <Text style={styles.cardTitle}>Defense Status</Text>
         <View style={styles.defenseGrid}>
           <View style={styles.defenseItem}>
+            <Shield size={16} color="#71B312" />
             <Text style={styles.defenseLabel}>Shields</Text>
             <Text style={styles.defenseValue}>Online</Text>
           </View>
@@ -706,7 +813,7 @@ function WarContent() {
           </View>
         </View>
       </View>
-      
+
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Active Wars</Text>
         <View style={styles.noDataBox}>
@@ -722,20 +829,33 @@ function IdolContent() {
     <View style={styles.tabContainer}>
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Global Quota</Text>
-        <View style={{ marginTop: 12 }}>
+        <View style={{ marginTop: 14 }}>
           <Text style={styles.quotaTitle}>Corn Harvest Mission</Text>
-          <View style={styles.vaultMeterBg}>
-            <View style={[styles.vaultMeterFill, { width: "42%", backgroundColor: "#71B312" }]} />
+          <View style={[styles.vaultMeterBg, { marginTop: 8 }]}>
+            <View
+              style={[
+                styles.vaultMeterFill,
+                { width: "42%", backgroundColor: "#71B312" },
+              ]}
+            />
           </View>
-          <Text style={styles.vaultLabelText}>4,200 / 10,000</Text>
+          <View style={[styles.vaultLabels, { marginTop: 6 }]}>
+            <Text style={styles.vaultLabelText}>4,200 harvested</Text>
+            <Text style={styles.vaultLabelText}>10,000 goal</Text>
+          </View>
         </View>
       </View>
 
-      <View style={[styles.card, { backgroundColor: "#FF383C" }]}>
-        <Text style={[styles.cardTitle, { color: "white" }]}>Active Penalty</Text>
-        <Text style={{ color: "white", fontFamily: "Space Mono", fontSize: 13, marginTop: 4, opacity: 0.9 }}>
-          Market Tax: +5% (Quota Failed)
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: "#FF383C", borderColor: "transparent" },
+        ]}
+      >
+        <Text style={[styles.cardTitle, { color: "white" }]}>
+          Active Penalty
         </Text>
+        <Text style={styles.penaltyText}>Market Tax: +5% (Quota Failed)</Text>
       </View>
     </View>
   );
@@ -746,53 +866,87 @@ function RosterContent() {
   return (
     <View style={styles.tabContainer}>
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Members ({joinedSyndicate?.memberCount})</Text>
-        <View style={{ gap: 12, marginTop: 12 }}>
-          <View style={styles.fullMemberRow}>
-             <View style={styles.memberAvatarSmall}>
-               <Text style={styles.avatarInitial}>S</Text>
-               <View style={styles.onlineDot} />
-             </View>
-             <View style={{ flex: 1, marginLeft: 12 }}>
-               <Text style={styles.fullMemberName}>Satoshi_Grind</Text>
-               <Text style={styles.fullMemberRole}>Grandmaster · Lv. 45</Text>
-             </View>
-             <Text style={styles.wealthLabel}>$2.4M</Text>
-          </View>
-          <View style={styles.fullMemberRow}>
-             <View style={styles.memberAvatarSmall}>
-               <Text style={styles.avatarInitial}>C</Text>
-               <View style={styles.onlineDot} />
-             </View>
-             <View style={{ flex: 1, marginLeft: 12 }}>
-               <Text style={styles.fullMemberName}>CropCommander</Text>
-               <Text style={styles.fullMemberRole}>Enforcer · Lv. 38</Text>
-             </View>
-             <Text style={styles.wealthLabel}>$1.1M</Text>
-          </View>
+        <Text style={styles.cardTitle}>
+          Members ({joinedSyndicate?.memberCount})
+        </Text>
+        <View style={{ gap: 0, marginTop: 14 }}>
+          {[
+            {
+              initial: "S",
+              name: "Satoshi_Grind",
+              role: "Grandmaster · Lv. 45",
+              wealth: "$2.4M",
+              online: true,
+            },
+            {
+              initial: "C",
+              name: "CropCommander",
+              role: "Enforcer · Lv. 38",
+              wealth: "$1.1M",
+              online: true,
+            },
+          ].map((m, i, arr) => (
+            <View
+              key={m.name}
+              style={[
+                styles.fullMemberRow,
+                i < arr.length - 1 && styles.fullMemberBorder,
+              ]}
+            >
+              <View style={styles.memberAvatarSmall}>
+                <Text style={styles.avatarInitial}>{m.initial}</Text>
+                {m.online && <View style={styles.onlineDot} />}
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.fullMemberName}>{m.name}</Text>
+                <Text style={styles.fullMemberRole}>{m.role}</Text>
+              </View>
+              <Text style={styles.wealthLabel}>{m.wealth}</Text>
+            </View>
+          ))}
         </View>
       </View>
     </View>
   );
 }
 
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
   },
+  safeArea: {
+    flex: 1,
+  },
+  dashHeaderExtension: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  createBtnHeader: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "rgba(3, 32, 24, 0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // ── SCROLL CONTENT
   scrollContent: {
-    paddingHorizontal: Spacing.four,
-    // Add significant padding to clear navigation bar and notch completely
-    paddingBottom: BottomTabInset + 120,
-    gap: Spacing.four,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: BottomTabInset,
+    gap: 10,
   },
+
+  // ── SEARCH LIST HEADER
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: Spacing.four,
-    marginBottom: Spacing.four,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
   },
   headerTitle: {
     color: "#032018",
@@ -803,7 +957,7 @@ const styles = StyleSheet.create({
   createBtn: {
     backgroundColor: "#032018",
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 14,
   },
   createBtnText: {
@@ -812,16 +966,20 @@ const styles = StyleSheet.create({
     fontFamily: "Space Mono",
     fontWeight: "700",
   },
+
+  // ── SEARCH BOX
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "white",
-    marginHorizontal: Spacing.four,
-    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 16,
     gap: 8,
-    marginBottom: Spacing.four,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: "rgba(3,32,24,0.07)",
   },
   searchInput: {
     flex: 1,
@@ -830,14 +988,18 @@ const styles = StyleSheet.create({
     fontFamily: "Space Mono",
     padding: 0,
   },
+
+  // ── BANNER
   banner: {
-    backgroundColor: "white",
-    marginHorizontal: Spacing.four,
-    paddingVertical: 16,
+    backgroundColor: "#DAF8B7",
+    marginHorizontal: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 16,
+    borderRadius: 14,
     alignItems: "center",
-    marginBottom: Spacing.four,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: "rgba(113,179,18,0.3)",
   },
   bannerText: {
     color: "#032018",
@@ -845,217 +1007,272 @@ const styles = StyleSheet.create({
     fontFamily: "Space Mono",
     fontWeight: "700",
   },
+
   noClansText: {
     textAlign: "center",
     color: "#032018",
-    opacity: 0.5,
-    marginTop: 40,
+    opacity: 0.4,
+    marginTop: 48,
     fontFamily: "Space Mono",
-    fontSize: 14,
+    fontSize: 13,
   },
-  listContainer: {
-    gap: 12,
-  },
+
+  // ── CLAN LIST
+  listContainer: { gap: 10 },
+
   clanCard: {
     flexDirection: "row",
     backgroundColor: "white",
-    borderRadius: 16,
-    padding: 16,
-    alignItems: "flex-start",
+    borderRadius: 18,
+    padding: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(3,32,24,0.07)",
   },
   clanAvatar: {
-    width: 48,
-    height: 48,
-    backgroundColor: "rgba(113, 179, 18, 0.15)",
+    width: 46,
+    height: 46,
+    backgroundColor: "rgba(113, 179, 18, 0.12)",
     borderRadius: 14,
     marginRight: 12,
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(113,179,18,0.2)",
   },
-  clanAvatarImage: {
-    width: 32,
-    height: 32,
-  },
-  clanInfo: {
-    flex: 1,
-    gap: 2,
-  },
+  clanAvatarImage: { width: 30, height: 30 },
+  clanInfo: { flex: 1, gap: 3 },
   clanNameRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 2,
   },
   clanName: {
     color: "#032018",
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: "Space Mono",
     fontWeight: "700",
     flex: 1,
-    marginRight: 8,
+    marginRight: 6,
   },
   rankText: {
     color: "#032018",
-    fontSize: 13, // Increased from 11
-    fontFamily: "Space Mono",
-    opacity: 0.5,
-  },
-  clanReqRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 2,
-  },
-  clanReqText: {
-    color: "#032018",
-    fontSize: 12, // Increased from 10
+    fontSize: 12,
     fontFamily: "Space Mono",
     opacity: 0.4,
   },
+  clanReqRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  clanReqText: {
+    color: "#032018",
+    fontSize: 11,
+    fontFamily: "Space Mono",
+    opacity: 0.4,
+  },
+  clanReqSep: {
+    color: "#032018",
+    opacity: 0.25,
+    fontSize: 11,
+    fontFamily: "Space Mono",
+  },
   clanMembersText: {
     color: "#032018",
-    fontSize: 13, // Increased from 11
+    fontSize: 12,
     fontFamily: "Space Mono",
     opacity: 0.5,
   },
+
+  // ── JOIN BUTTON
   joinBtnSmall: {
     backgroundColor: "#032018",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: 12,
-    marginLeft: 8,
+    marginLeft: 10,
     alignSelf: "center",
   },
   fullBtn: {
-    backgroundColor: "#DAF8B7",
+    backgroundColor: "#F0F0EC",
+    borderWidth: 1,
+    borderColor: "rgba(3,32,24,0.12)",
   },
   joinBtnText: {
     color: "white",
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Space Mono",
     fontWeight: "700",
   },
-  fullBtnText: {
-    color: "#032018",
-  },
+  fullBtnText: { color: "rgba(3,32,24,0.45)" },
 
-  // Profile View Styles
+  // ── BACK BUTTON
   backButton: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6, // Very tight
+    marginBottom: 16,
+    gap: 2,
   },
   backText: {
     color: "#032018",
     fontSize: 14,
     fontFamily: "Space Mono",
-    marginLeft: 4,
   },
+
+  // ── PROFILE VIEW
   profileHeaderRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 6, // Very tight against title
+    marginBottom: 14,
+    gap: 16,
   },
   profileAvatarBox: {
-    width: 80,
-    height: 80,
+    width: 82,
+    height: 82,
     backgroundColor: "white",
-    borderRadius: 16,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(3,32,24,0.08)",
   },
-  profileAvatarImage: {
-    width: 54,
-    height: 54,
-  },
+  profileAvatarImage: { width: 56, height: 56 },
   profileHeaderRight: {
     flex: 1,
-    marginLeft: 16,
     justifyContent: "space-between",
-    height: 80,
+    height: 82,
   },
   profileRankRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
+  },
+  rankBadgeLarge: {
+    backgroundColor: "rgba(113,179,18,0.12)",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "rgba(113,179,18,0.25)",
+  },
+  rankBadgeLargeText: {
+    color: "#71B312",
+    fontSize: 11,
+    fontFamily: "Space Mono",
+    fontWeight: "700",
   },
   clanReqRowProfile: {
     flexDirection: "row",
-    gap: 24,
+    alignItems: "center",
+    gap: 16,
+  },
+  reqBlock: { gap: 2 },
+  reqDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: "rgba(3,32,24,0.08)",
   },
   profileNameLarge: {
     color: "#032018",
     fontSize: 26,
     fontFamily: "Space Mono",
     fontWeight: "700",
-    marginBottom: 8, // Very tight against description
+    marginBottom: 10,
   },
+
+  // ── SECTION TITLE
   sectionTitle: {
     color: "#032018",
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: "Space Mono",
     fontWeight: "700",
-    marginBottom: 6, // Very close to list
+    marginBottom: 8,
   },
+
+  // ── REQ LABELS
   reqLabel: {
     color: "#032018",
-    fontSize: 13, // Increased from 12
+    fontSize: 11,
     fontFamily: "Space Mono",
-    opacity: 0.5,
+    opacity: 0.45,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   reqValueLarge: {
     color: "#032018",
     fontSize: 20,
     fontFamily: "Space Mono",
     fontWeight: "700",
-    marginTop: 2,
   },
+
+  // ── CARD
   card: {
     backgroundColor: "white",
-    padding: 16, // Returned to standard to avoid bloat
-    borderRadius: 16,
-    marginBottom: 8, // Very tight
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(3,32,24,0.07)",
   },
   descriptionText: {
     color: "#032018",
-    fontSize: 15, // Increased from 14
+    fontSize: 14,
     fontFamily: "Space Mono",
-    opacity: 0.7,
+    opacity: 0.65,
     lineHeight: 22,
   },
+
+  // ── STATS ROW
   statsRow: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 8, // Tight drop before Members
+    gap: 10,
+  },
+  statCard: {
+    flex: 1,
+    gap: 3,
   },
   statCardCentered: {
     flex: 1,
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 16, // Smoothed out
-    backgroundColor: "white",
-    borderRadius: 16,
+    paddingVertical: 18,
   },
   statValue: {
     color: "#032018",
-    fontSize: 24, // BIGGER
+    fontSize: 24,
     fontFamily: "Space Mono",
     fontWeight: "700",
+    lineHeight: 28,
   },
+  statValueMuted: {
+    fontSize: 15,
+    opacity: 0.4,
+    fontWeight: "400",
+  },
+  statSub: {
+    color: "#032018",
+    fontSize: 11,
+    fontFamily: "Space Mono",
+    opacity: 0.35,
+  },
+
+  // ── MEMBERS LIST
   membersListCard: {
     backgroundColor: "white",
-    borderRadius: 16,
+    borderRadius: 18,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(3,32,24,0.07)",
   },
   memberRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 14, // Extra breathing room inside
+    paddingVertical: 13,
     paddingHorizontal: 16,
   },
   memberRowBorder: {
     borderTopWidth: 1,
-    borderTopColor: "rgba(3, 32, 24, 0.05)",
+    borderTopColor: "rgba(3, 32, 24, 0.06)",
   },
   memberInfo: {
     flexDirection: "row",
@@ -1063,8 +1280,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   memberAvatar: {
-    width: 36, // Bigger
-    height: 36, // Bigger
+    width: 36,
+    height: 36,
     borderRadius: 18,
     backgroundColor: "#DAF8B7",
     justifyContent: "center",
@@ -1072,47 +1289,84 @@ const styles = StyleSheet.create({
   },
   memberInitial: {
     color: "#032018",
-    fontSize: 14, // Bigger
+    fontSize: 13,
     fontFamily: "Space Mono",
     fontWeight: "700",
   },
   memberName: {
     color: "#032018",
-    fontSize: 16, // BIGGER
+    fontSize: 14,
     fontFamily: "Space Mono",
     fontWeight: "700",
-    marginBottom: 2,
   },
   memberRole: {
     color: "#032018",
-    fontSize: 13, // Increased from 11
+    fontSize: 11,
     fontFamily: "Space Mono",
-    opacity: 0.5,
+    opacity: 0.45,
+    marginTop: 1,
   },
   memberLevel: {
     color: "#032018",
-    fontSize: 14, // Increased from 13
+    fontSize: 12,
     fontFamily: "Space Mono",
-    opacity: 0.6,
+    opacity: 0.5,
+  },
+
+  // ── CREATE FORM
+  cardSectionLabel: {
+    color: "#032018",
+    fontSize: 11,
+    fontFamily: "Space Mono",
+    opacity: 0.45,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  logoGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 12,
+    justifyContent: "space-between",
+  },
+  logoOption: {
+    width: 50,
+    height: 50,
+    backgroundColor: "#F5F7F2",
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  logoOptionSelected: {
+    backgroundColor: "rgba(113,179,18,0.12)",
+    borderColor: "#032018",
   },
   inputField: {
-    backgroundColor: "#F8F9FA",
-    borderRadius: 12,
+    backgroundColor: "#F5F7F2",
+    borderRadius: 13,
     borderWidth: 1,
     borderColor: "rgba(3, 32, 24, 0.1)",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
     color: "#032018",
     fontFamily: "Space Mono",
     fontSize: 14,
     marginTop: 8,
   },
+  radioRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 10,
+    marginBottom: 18,
+  },
   radioBtn: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 13,
+    borderRadius: 13,
     borderWidth: 1,
-    borderColor: "rgba(3, 32, 24, 0.2)",
+    borderColor: "rgba(3, 32, 24, 0.15)",
     alignItems: "center",
   },
   radioBtnActive: {
@@ -1122,66 +1376,81 @@ const styles = StyleSheet.create({
   radioText: {
     color: "#032018",
     fontFamily: "Space Mono",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
   },
-  radioTextActive: {
-    color: "white",
+  radioTextActive: { color: "white" },
+  inputGroup: { marginTop: 16 },
+  inputLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   createSubmitBtn: {
     backgroundColor: "#032018",
     paddingVertical: 18,
     borderRadius: 16,
     alignItems: "center",
-    marginTop: 12,
-    marginBottom: 24,
+    marginTop: 6,
   },
   createSubmitText: {
     color: "white",
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: "Space Mono",
     fontWeight: "700",
   },
-  // Dashboard Styles
+
+  // ── DASHBOARD HEADER
   dashboardHeader: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingTop: 12,
+    paddingBottom: 14,
     backgroundColor: "white",
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    gap: 16,
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
+    gap: 14,
+    borderBottomWidth: 1,
+    borderColor: "rgba(3,32,24,0.06)",
   },
   dashIdentity: {
     flexDirection: "row",
     alignItems: "center",
   },
   dashLogoBox: {
-    width: 48,
-    height: 48,
-    backgroundColor: "#F8F9FA",
-    borderRadius: 12,
+    width: 46,
+    height: 46,
+    backgroundColor: "#F5F7F2",
+    borderRadius: 13,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(3, 32, 24, 0.05)",
+    borderColor: "rgba(3, 32, 24, 0.07)",
+  },
+  dashTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
   },
   dashTitle: {
     color: "#032018",
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: "Space Mono",
     fontWeight: "700",
   },
   dashSubtitle: {
     color: "#032018",
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Space Mono",
-    opacity: 0.5,
+    opacity: 0.4,
+    marginTop: 2,
   },
   rankBadge: {
-    backgroundColor: "rgba(113, 179, 18, 0.15)",
-    paddingHorizontal: 6,
+    backgroundColor: "rgba(113, 179, 18, 0.12)",
+    paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: "rgba(113,179,18,0.25)",
   },
   rankBadgeText: {
     color: "#71B312",
@@ -1190,33 +1459,34 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   chatEntryBtn: {
-    width: 40,
-    height: 40,
-    backgroundColor: "#F8F9FA",
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    backgroundColor: "#F5F7F2",
+    borderRadius: 19,
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(3,32,24,0.07)",
   },
-  buffStrip: {
-    flexDirection: "row",
-  },
+
+  // ── BUFF PILLS
   pill: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 20,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: "#F5F7F2",
     borderWidth: 1,
-    borderColor: "rgba(3, 32, 24, 0.05)",
+    borderColor: "rgba(3, 32, 24, 0.08)",
   },
   pillActive: {
-    backgroundColor: "rgba(113, 179, 18, 0.1)",
-    borderColor: "#71B312",
+    backgroundColor: "rgba(113, 179, 18, 0.10)",
+    borderColor: "rgba(113,179,18,0.3)",
   },
   pillText: {
     fontSize: 11,
     fontFamily: "Space Mono",
     color: "#032018",
-    opacity: 0.6,
+    opacity: 0.5,
   },
   pillTextActive: {
     fontSize: 11,
@@ -1224,97 +1494,152 @@ const styles = StyleSheet.create({
     color: "#71B312",
     fontWeight: "700",
   },
-  tabScroll: {
-    height: 44,
-  },
+
+  // ── TABS
   tabBtn: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 11,
     justifyContent: "center",
-    borderRadius: 12,
   },
-  tabBtnActive: {
-    backgroundColor: "#032018",
-  },
+  tabBtnActive: { backgroundColor: "#032018" },
   tabBtnText: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: "Space Mono",
     color: "#032018",
-    opacity: 0.5,
+    opacity: 0.4,
   },
   tabBtnTextActive: {
     color: "white",
     opacity: 1,
     fontWeight: "700",
   },
-  tabContainer: {
-    gap: 12,
-  },
-  cardHeader: {
+
+  // ── TAB CONTENT
+  tabContainer: { gap: 10 },
+
+  // ── CARD HEADER
+  cardHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 4,
   },
   cardTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: "Space Mono",
     fontWeight: "700",
     color: "#032018",
   },
+  cardAction: {
+    fontSize: 11,
+    fontFamily: "Space Mono",
+    color: "#032018",
+    opacity: 0.4,
+  },
+  cardSectionLabel2: {
+    fontSize: 11,
+    fontFamily: "Space Mono",
+    color: "#032018",
+    opacity: 0.45,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+
+  // ── COMMODITY
   commodityRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    paddingVertical: 11,
+    gap: 10,
   },
-  commodityInfo: {
-    flexDirection: "row",
+  commodityRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(3,32,24,0.06)",
+  },
+  cropIconWrap: {
+    width: 38,
+    height: 38,
+    backgroundColor: "#F5F7F2",
+    borderRadius: 11,
+    justifyContent: "center",
     alignItems: "center",
+    flexShrink: 0,
   },
+  cropInfo: { flex: 1 },
+  cropRight: { alignItems: "flex-end", gap: 4 },
   commodityName: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: "Space Mono",
     fontWeight: "700",
     color: "#032018",
   },
   commodityStats: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: "Space Mono",
     color: "#032018",
-    opacity: 0.5,
+    opacity: 0.4,
+    marginTop: 2,
   },
   priceMove: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: "Space Mono",
     fontWeight: "700",
   },
   hintPill: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 4,
-    marginTop: 2,
+    borderRadius: 5,
   },
   hintText: {
     fontSize: 9,
     fontFamily: "Space Mono",
     fontWeight: "700",
     color: "white",
+    letterSpacing: 0.4,
   },
   sellHint: { backgroundColor: "#FF383C" },
   buyHint: { backgroundColor: "#71B312" },
   holdHint: { backgroundColor: "#FFB038" },
+
+  monopolyTag: {
+    backgroundColor: "rgba(255,56,60,0.1)",
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderWidth: 1,
+    borderColor: "rgba(255,56,60,0.2)",
+  },
+  monopolyText: {
+    fontSize: 8,
+    fontFamily: "Space Mono",
+    fontWeight: "700",
+    color: "#FF383C",
+    letterSpacing: 0.3,
+  },
+
+  // ── MINI ROSTER
   miniMemberRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
+    paddingVertical: 10,
+  },
+  miniMemberBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(3,32,24,0.06)",
   },
   statusDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
+    flexShrink: 0,
   },
   miniMemberName: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: "Space Mono",
     color: "#032018",
+    fontWeight: "700",
     flex: 1,
   },
   miniMemberRole: {
@@ -1323,118 +1648,142 @@ const styles = StyleSheet.create({
     color: "#032018",
     opacity: 0.4,
   },
-  vaultMeterContainer: {
-    marginTop: 12,
-    gap: 8,
-  },
+
+  // ── VAULT / METER
+  vaultMeterContainer: { marginTop: 14, gap: 8 },
   vaultMeterBg: {
-    height: 12,
-    backgroundColor: "#F8F9FA",
-    borderRadius: 6,
+    height: 10,
+    backgroundColor: "#F5F7F2",
+    borderRadius: 8,
     overflow: "hidden",
   },
   vaultMeterFill: {
     height: "100%",
     backgroundColor: "#71B312",
+    borderRadius: 8,
   },
   vaultLabels: {
     flexDirection: "row",
     justifyContent: "space-between",
   },
   vaultLabelText: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: "Space Mono",
     color: "#032018",
-    opacity: 0.6,
+    opacity: 0.45,
   },
+
+  // ── DEPOSIT
   depositRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(3, 32, 24, 0.05)",
+    paddingVertical: 11,
   },
   depositName: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: "Space Mono",
     color: "#032018",
+    fontWeight: "700",
   },
   depositQty: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Space Mono",
     color: "#032018",
-    opacity: 0.5,
+    opacity: 0.4,
+    flex: 1,
+    textAlign: "right",
+    marginRight: 12,
   },
   depositBtn: {
-    width: 24,
-    height: 24,
+    width: 28,
+    height: 28,
     backgroundColor: "#DAF8B7",
-    borderRadius: 12,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
   },
   depositBtnText: {
     color: "#032018",
     fontWeight: "700",
+    fontSize: 16,
+    lineHeight: 20,
   },
+
+  // ── DEFENSE
   defenseGrid: {
     flexDirection: "row",
-    marginTop: 12,
-    gap: 16,
+    marginTop: 14,
+    gap: 10,
   },
   defenseItem: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
-    padding: 12,
-    borderRadius: 12,
+    backgroundColor: "#F5F7F2",
+    padding: 14,
+    borderRadius: 14,
     alignItems: "center",
-    gap: 4,
+    gap: 5,
   },
   defenseLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: "Space Mono",
     color: "#032018",
     opacity: 0.4,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   defenseValue: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: "Space Mono",
     fontWeight: "700",
     color: "#71B312",
   },
   noDataBox: {
     marginTop: 12,
-    padding: 20,
-    backgroundColor: "#F8F9FA",
-    borderRadius: 12,
+    padding: 22,
+    backgroundColor: "#F5F7F2",
+    borderRadius: 13,
     borderStyle: "dashed",
     borderWidth: 1,
     borderColor: "rgba(3, 32, 24, 0.1)",
     alignItems: "center",
   },
   noDataText: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: "Space Mono",
     color: "#032018",
     opacity: 0.3,
   },
+
+  // ── IDOL
   quotaTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: "Space Mono",
     fontWeight: "700",
     color: "#032018",
-    marginBottom: 8,
   },
+  penaltyText: {
+    color: "white",
+    fontFamily: "Space Mono",
+    fontSize: 12,
+    marginTop: 6,
+    opacity: 0.88,
+  },
+
+  // ── ROSTER
   fullMemberRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 12,
+  },
+  fullMemberBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(3,32,24,0.06)",
   },
   memberAvatarSmall: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: "#DAF8B7",
     justifyContent: "center",
     alignItems: "center",
@@ -1443,6 +1792,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Space Mono",
     fontWeight: "700",
+    color: "#032018",
   },
   onlineDot: {
     position: "absolute",
@@ -1456,83 +1806,22 @@ const styles = StyleSheet.create({
     borderColor: "white",
   },
   fullMemberName: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: "Space Mono",
     fontWeight: "700",
     color: "#032018",
   },
   fullMemberRole: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Space Mono",
     color: "#032018",
-    opacity: 0.5,
+    opacity: 0.4,
+    marginTop: 2,
   },
   wealthLabel: {
-    fontSize: 15,
-    fontFamily: "Space Mono",
-    fontWeight: "700",
-    color: "#032018",
-  },
-  // Chat Styles
-  chatHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(3, 32, 24, 0.05)",
-  },
-  chatHeaderTitle: {
-    fontSize: 18,
-    fontFamily: "Space Mono",
-    fontWeight: "700",
-    color: "#032018",
-  },
-  chatBubble: {
-    backgroundColor: "white",
-    padding: 12,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: "rgba(3, 32, 24, 0.1)",
-    gap: 4,
-  },
-  chatUser: {
-    fontSize: 12,
-    fontFamily: "Space Mono",
-    fontWeight: "700",
-    color: "#032018",
-  },
-  chatText: {
     fontSize: 14,
     fontFamily: "Space Mono",
+    fontWeight: "700",
     color: "#032018",
-    lineHeight: 20,
-  },
-  chatInputRow: {
-    flexDirection: "row",
-    padding: 16,
-    paddingBottom: BottomTabInset + 16,
-    backgroundColor: "white",
-    gap: 12,
-    alignItems: "center",
-  },
-  chatInput: {
-    flex: 1,
-    backgroundColor: "#F8F9FA",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontFamily: "Space Mono",
-    fontSize: 14,
-    color: "#032018",
-  },
-  sendBtn: {
-    width: 44,
-    height: 44,
-    backgroundColor: "#032018",
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
   },
 });
