@@ -1,40 +1,26 @@
-import { BACKEND_WS_URL } from "@/config/backend";
+import { websocketManager } from "@/services/websocket-manager";
 
-let activeSocket: WebSocket | null = null;
-
-export function connectGameSocket(accessToken: string): WebSocket {
-  if (activeSocket) {
-    activeSocket.close();
-    activeSocket = null;
-  }
-
-  const socket = new WebSocket(`${BACKEND_WS_URL}/?token=${accessToken}`);
-  activeSocket = socket;
-
-  socket.onclose = () => {
-    if (activeSocket === socket) {
-      activeSocket = null;
-    }
-  };
-
-  return socket;
+export function connectGameSocket(accessToken: string) {
+  websocketManager.connect(accessToken);
+  return null;
 }
 
 export function getGameSocket(): WebSocket | null {
-  return activeSocket;
+  return null;
 }
 
 export function disconnectGameSocket() {
-  if (activeSocket) {
-    activeSocket.close();
-    activeSocket = null;
-  }
+  websocketManager.disconnect();
 }
 
 export function sendGameSocketMessage(payload: unknown) {
-  if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) {
-    return;
-  }
-
-  activeSocket.send(JSON.stringify(payload));
+  const typedPayload =
+    payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const type =
+    typeof typedPayload.type === "string" ? typedPayload.type : "PING";
+  const actionPayload =
+    typedPayload.payload && typeof typedPayload.payload === "object"
+      ? (typedPayload.payload as Record<string, unknown>)
+      : undefined;
+  websocketManager.send(type, actionPayload, false).catch(() => undefined);
 }

@@ -4,7 +4,10 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { CROP_GUIDE, CropType } from "@/constants/crops";
 import { useFarmStore } from "@/store/farm-store";
+import { useInventoryStore } from "@/store/inventory-store";
+import { useServerTimeStore } from "@/store/server-time-store";
 import { useGameStore } from "@/store/game-store";
+import { websocketManager } from "@/services/websocket-manager";
 
 const soilImage = require("@/assets/image/Gemini_Generated_Image_a8azi1a8azi1a8az.png");
 const unlockImage = require("@/assets/image/farm-plot-it.png");
@@ -36,10 +39,67 @@ const cropAssets: Record<CropType, any> = {
   wheat: require("@/assets/image/assets_images_icons_crops_wheat.webp"),
 };
 
+const seedlingAssets: Record<CropType, any> = {
+  cacao: require("@/assets/seedlings/cacao_seedling.png"),
+  carrot: require("@/assets/seedlings/carrot_seedling.png"),
+  chili: require("@/assets/seedlings/chile_seedling.png"),
+  coffee_beans: require("@/assets/seedlings/coffee_beans.png"),
+  corn: require("@/assets/seedlings/corn_seedling.png"),
+  cotton: require("@/assets/seedlings/cotton_seedling.png"),
+  grapes: require("@/assets/seedlings/grape_seedling.png"),
+  lavender: require("@/assets/seedlings/lavender_seedling.png"),
+  mud_pit: require("@/assets/seedlings/mud_pit.png"),
+  oat: require("@/assets/seedlings/oat_seedling.png"),
+  onion: require("@/assets/seedlings/onion_seedling.png"),
+  pepper: require("@/assets/seedlings/pepper_seedling.png"),
+  potato: require("@/assets/seedlings/potato_seedling.png"),
+  rice: require("@/assets/seedlings/rice_seedling.png"),
+  saffron: require("@/assets/seedlings/saffron_seedling.png"),
+  sapling_patch: require("@/assets/seedlings/sapling_patch.png"),
+  soybean: require("@/assets/seedlings/soyabeans_seedling.png"),
+  strawberry: require("@/assets/seedlings/strawberry_seedling.png"),
+  sugarcane: require("@/assets/seedlings/sugarcane_seedling.png"),
+  sunflower: require("@/assets/seedlings/sunflower_seedling.png"),
+  tea_leaves: require("@/assets/seedlings/tea_leaves.png"),
+  tomato: require("@/assets/seedlings/tomatoes_seedling.png"),
+  vanilla: require("@/assets/seedlings/vanilla_seedling.png"),
+  wheat: require("@/assets/seedlings/wheat_seedling.png"),
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const formatCropName = (id: string) =>
   id.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+function generateRequestId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function toLocalCropId(cropId: string): CropType {
+  switch (cropId) {
+    case "coffee":
+      return "coffee_beans";
+    case "tea":
+      return "tea_leaves";
+    case "sapling":
+      return "sapling_patch";
+    default:
+      return cropId as CropType;
+  }
+}
+
+function toBackendSeedInventoryKey(cropId: CropType): string {
+  switch (cropId) {
+    case "coffee_beans":
+      return "seed:coffee";
+    case "tea_leaves":
+      return "seed:tea";
+    case "sapling_patch":
+      return "seed:sapling";
+    default:
+      return `seed:${cropId}`;
+  }
+}
 
 const formatTime = (seconds: number): string => {
   if (seconds <= 0) return "Ready!";
@@ -61,6 +121,9 @@ function useTimer(
 ): { remaining: number; progress: number } {
   const [remaining, setRemaining] = useState(0);
   const [progress, setProgress] = useState(0);
+  const getEstimatedServerNowMs = useServerTimeStore(
+    (state) => state.getEstimatedServerNowMs,
+  );
 
   // Use a ref so onComplete never goes stale inside the interval closure
   const onCompleteRef = useRef(onComplete);
@@ -84,10 +147,10 @@ function useTimer(
     if (!cropDef) return;
 
     const totalMs = cropDef.growthTime * 1000;
-    const targetTime = plot.plantedAt + totalMs;
+    const targetTime = plot.readyAt ?? plot.plantedAt + totalMs;
 
     const tick = () => {
-      const now = Date.now();
+      const now = getEstimatedServerNowMs();
       const diffMs = targetTime - now;
       const diffSec = Math.max(0, Math.ceil(diffMs / 1000));
       const prog = Math.min(1, Math.max(0, (now - plot.plantedAt) / totalMs));
@@ -105,7 +168,7 @@ function useTimer(
     tick(); // run immediately — no blank first second
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [plot?.status, plot?.plantedAt, plot?.cropId]);
+  }, [getEstimatedServerNowMs, plot?.status, plot?.plantedAt, plot?.readyAt, plot?.cropId]);
 
   return { remaining, progress };
 }
@@ -125,11 +188,14 @@ function ProgressBar({ progress }: { progress: number }) {
 
 const FarmTile = memo(function FarmTile({ id }: { id: string }) {
   const plot = useFarmStore((state) => state.plots[id]);
-  const plantCrop = useFarmStore((state) => state.plantCrop);
-  const harvestCrop = useFarmStore((state) => state.harvestCrop);
   const markReady = useFarmStore((state) => state.markReady);
-  const addCoins = useGameStore((state) => state.addCoins);
-  const addXp = useGameStore((state) => state.addXp);
+  const applyPlantResult = useFarmStore((state) => state.applyPlantResult);
+  const applyHarvestResult = useFarmStore((state) => state.applyHarvestResult);
+  const selectedCropId = useFarmStore((state) => state.selectedCropId);
+  const applyInventoryDelta = useInventoryStore((state) => state.applyInventoryDelta);
+  const setEconomyFromServer = useGameStore((state) => state.setEconomyFromServer);
+  const [isPlanting, setIsPlanting] = useState(false);
+  const [isHarvesting, setIsHarvesting] = useState(false);
 
   // Called automatically by the timer when growthTime elapses
   const handleTimerComplete = useCallback(() => {
@@ -138,17 +204,158 @@ const FarmTile = memo(function FarmTile({ id }: { id: string }) {
 
   const { remaining, progress } = useTimer(plot, handleTimerComplete);
 
-  const handlePress = useCallback(() => {
+  const toBackendCropId = (cropId: CropType): string => {
+    switch (cropId) {
+      case "coffee_beans":
+        return "coffee";
+      case "tea_leaves":
+        return "tea";
+      case "sapling_patch":
+        return "sapling";
+      default:
+        return cropId;
+    }
+  };
+
+  const handlePress = useCallback(async () => {
     if (!plot) return;
-    if (plot.status === "empty") {
-      plantCrop(plot.id);
-    } else if (plot.status === "ready") {
-      harvestCrop(plot.id);
-      addCoins(10);
-      addXp(5);
+    const plotIndex = Number(plot.id.replace("plot-", ""));
+    if (!Number.isFinite(plotIndex)) {
+      return;
+    }
+
+    if (plot.status === "empty" && !isPlanting) {
+      setIsPlanting(true);
+      const requestId = generateRequestId();
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const unsubscribe = websocketManager.onMessage((message) => {
+            if (message.type === "PLANT_OK") {
+              const data =
+                message.data && typeof message.data === "object"
+                  ? (message.data as Record<string, unknown>)
+                  : null;
+
+              if (
+                data &&
+                typeof data.cropId === "string" &&
+                typeof data.plantedAtMs === "number"
+              ) {
+                applyPlantResult({
+                  plotId: plotIndex,
+                  cropId: toLocalCropId(data.cropId),
+                  plantedAtMs: data.plantedAtMs,
+                  readyAtMs:
+                    typeof data.readyAtMs === "number" ? data.readyAtMs : undefined,
+                });
+                applyInventoryDelta(
+                  toBackendSeedInventoryKey(selectedCropId),
+                  -1,
+                  "seed",
+                );
+
+                if (typeof data.goldBalance === "number") {
+                  setEconomyFromServer({ coins: data.goldBalance });
+                }
+              }
+
+              unsubscribe();
+              resolve();
+              return;
+            }
+
+            if (message.type === "ERROR") {
+              unsubscribe();
+              reject(new Error(message.message || message.code || "PLANT_FAILED"));
+            }
+          });
+
+          websocketManager
+            .send(
+              "PLANT",
+              {
+                plotId: plotIndex,
+                cropId: toBackendCropId(selectedCropId),
+                requestId,
+              },
+              false,
+            )
+            .catch((error) => {
+              unsubscribe();
+              reject(error);
+            });
+        });
+      } catch (error) {
+        console.log("[farm] plant failed", error);
+      } finally {
+        setIsPlanting(false);
+      }
+      return;
+    }
+
+    if (plot.status === "ready" && !isHarvesting) {
+      setIsHarvesting(true);
+      const requestId = generateRequestId();
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const unsubscribe = websocketManager.onMessage((message) => {
+            if (message.type === "HARVEST_OK") {
+              const data =
+                message.data && typeof message.data === "object"
+                  ? (message.data as Record<string, unknown>)
+                  : null;
+
+              if (
+                data &&
+                typeof data.itemId === "string" &&
+                typeof data.quantity === "number"
+              ) {
+                applyHarvestResult(plotIndex);
+                applyInventoryDelta(data.itemId, Math.max(0, data.quantity));
+              }
+
+              unsubscribe();
+              resolve();
+              return;
+            }
+
+            if (message.type === "ERROR") {
+              unsubscribe();
+              reject(new Error(message.message || message.code || "HARVEST_FAILED"));
+            }
+          });
+
+          websocketManager
+            .send(
+              "HARVEST",
+              {
+                plotId: plotIndex,
+                requestId,
+              },
+              false,
+            )
+            .catch((error) => {
+              unsubscribe();
+              reject(error);
+            });
+        });
+      } catch (error) {
+        console.log("[farm] harvest failed", error);
+      } finally {
+        setIsHarvesting(false);
+      }
     }
     // "planted" tiles: no tap action — timer drives the transition
-  }, [plot, plantCrop, harvestCrop, addCoins, addXp]);
+  }, [
+    applyInventoryDelta,
+    applyHarvestResult,
+    applyPlantResult,
+    isHarvesting,
+    isPlanting,
+    plot,
+    selectedCropId,
+    setEconomyFromServer,
+  ]);
 
   if (!plot) return null;
 
@@ -161,7 +368,8 @@ const FarmTile = memo(function FarmTile({ id }: { id: string }) {
             style={[
               styles.tile,
               styles.tileEmpty,
-              pressed && styles.tilePressed,
+              pressed && !isPlanting && styles.tilePressed,
+              isPlanting && styles.tileDisabled,
             ]}
           >
             <Image
@@ -193,7 +401,7 @@ const FarmTile = memo(function FarmTile({ id }: { id: string }) {
           ]}
         >
           <Image
-            source={cropAssets[cropId]}
+            source={seedlingAssets[cropId] ?? cropAssets[cropId]}
             style={styles.cropImage}
             contentFit="contain"
             cachePolicy="memory-disk"
@@ -218,7 +426,8 @@ const FarmTile = memo(function FarmTile({ id }: { id: string }) {
             style={[
               styles.tile,
               styles.tileReady,
-              pressed && styles.tilePressed,
+              pressed && !isHarvesting && styles.tilePressed,
+              isHarvesting && styles.tileDisabled,
             ]}
           >
             <View style={styles.readyGlow} />
@@ -311,6 +520,9 @@ const styles = StyleSheet.create({
   tilePressed: {
     opacity: 0.82,
     transform: [{ scale: 0.96 }],
+  },
+  tileDisabled: {
+    opacity: 0.55,
   },
 
   // Empty

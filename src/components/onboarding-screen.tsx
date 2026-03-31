@@ -23,7 +23,7 @@ import { AuthenticatingModal } from "@/components/authenticating-modal";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { getAuthChallenge, verifyWalletSignature } from "@/services/auth-api";
-import { connectGameSocket } from "@/services/ws-client";
+import { websocketManager } from "@/services/websocket-manager";
 import { useAppStore } from "@/store/app-store";
 import { useAuthStore } from "@/store/auth-store";
 import { useWalletStore } from "@/store/wallet-store";
@@ -112,7 +112,7 @@ export function OnboardingScreen() {
         });
 
         await setSession(authResult);
-        connectGameSocket(authResult.accessToken);
+        websocketManager.connect(authResult.accessToken);
         setSeekerAuthenticated(true);
       } else {
         setAuthMode("creating_wallet");
@@ -130,7 +130,7 @@ export function OnboardingScreen() {
         });
 
         await setSession(authResult);
-        connectGameSocket(authResult.accessToken);
+        websocketManager.connect(authResult.accessToken);
         setSeekerAuthenticated(false);
       }
 

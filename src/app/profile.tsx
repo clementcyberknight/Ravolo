@@ -9,6 +9,9 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors, Fonts } from "@/constants/theme";
 import { useGameStore } from "@/store/game-store";
 import { useInventoryStore } from "@/store/inventory-store";
+import { useAuthStore } from "@/store/auth-store";
+import { websocketManager } from "@/services/websocket-manager";
+import { useAppStore } from "@/store/app-store";
 
 const FONT = "Space Mono";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -64,6 +67,8 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const storeItems = useInventoryStore((state) => state.items);
+  const logout = useAuthStore((state) => state.logout);
+  const resetOnboarding = useAppStore((state) => state.resetOnboarding);
 
   // Memoize playerData to prevent unnecessary downstream re-renders
   const playerData = useMemo(() => ({
@@ -98,6 +103,13 @@ export default function ProfileScreen() {
     [storeItems]
   );
 
+  const handleLogout = async () => {
+    websocketManager.disconnect();
+    await logout();
+    resetOnboarding();
+    router.replace("/"); // RootLayout will show onboarding again after logout.
+  };
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView 
@@ -116,6 +128,17 @@ export default function ProfileScreen() {
              style={[styles.backButton, { top: Math.max(insets.top, 20) }]}
            >
              <ThemedText style={styles.backButtonText}>✕</ThemedText>
+           </Pressable>
+
+           {/* Logout Button */}
+           <Pressable
+             onPress={handleLogout}
+             style={[
+               styles.logoutButton,
+               { top: Math.max(insets.top, 20) },
+             ]}
+           >
+             <ThemedText style={styles.logoutButtonText}>LOG OUT</ThemedText>
            </Pressable>
         </View>
 
@@ -428,5 +451,24 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 20,
     fontWeight: "700",
+  },
+  logoutButton: {
+    position: "absolute",
+    right: 20,
+    width: 92,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#032018",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 100,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+  },
+  logoutButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1,
   },
 });

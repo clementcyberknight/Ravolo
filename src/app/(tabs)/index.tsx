@@ -1,5 +1,5 @@
 import { Image } from "expo-image";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -12,6 +12,8 @@ import { SeedSelectorModal } from "@/components/seed-selector-modal";
 import { SubTabs } from "@/components/sub-tabs";
 import { ThemedView } from "@/components/themed-view";
 import { BottomTabInset } from "@/constants/theme";
+import { websocketManager } from "@/services/websocket-manager";
+import { useAuthStore } from "@/store/auth-store";
 import { useFarmStore } from "@/store/farm-store";
 import { useInventoryStore } from "@/store/inventory-store";
 
@@ -19,10 +21,31 @@ const inventoryIcon = require("@/assets/image/assets_images_icons_misc_box.webp"
 const marketIcon = require("@/assets/image/assets_images_icons_misc_market.webp");
 const seedIcon = require("@/assets/image/assets_images_icons_misc_emoji_wheat.webp");
 
-const cropAssets: Record<string, any> = {
-  wheat: require("@/assets/image/assets_images_icons_crops_wheat.webp"),
-  corn: require("@/assets/image/assets_images_icons_crops_corn.webp"),
-  carrot: require("@/assets/image/assets_images_icons_crops_carrot.webp"),
+const seedlingAssets: Record<string, any> = {
+  cacao: require("@/assets/seedlings/cacao_seedling.png"),
+  carrot: require("@/assets/seedlings/carrot_seedling.png"),
+  chili: require("@/assets/seedlings/chile_seedling.png"),
+  coffee_beans: require("@/assets/seedlings/coffee_beans.png"),
+  corn: require("@/assets/seedlings/corn_seedling.png"),
+  cotton: require("@/assets/seedlings/cotton_seedling.png"),
+  grapes: require("@/assets/seedlings/grape_seedling.png"),
+  lavender: require("@/assets/seedlings/lavender_seedling.png"),
+  mud_pit: require("@/assets/seedlings/mud_pit.png"),
+  oat: require("@/assets/seedlings/oat_seedling.png"),
+  onion: require("@/assets/seedlings/onion_seedling.png"),
+  pepper: require("@/assets/seedlings/pepper_seedling.png"),
+  potato: require("@/assets/seedlings/potato_seedling.png"),
+  rice: require("@/assets/seedlings/rice_seedling.png"),
+  saffron: require("@/assets/seedlings/saffron_seedling.png"),
+  sapling_patch: require("@/assets/seedlings/sapling_patch.png"),
+  soybean: require("@/assets/seedlings/soyabeans_seedling.png"),
+  strawberry: require("@/assets/seedlings/strawberry_seedling.png"),
+  sugarcane: require("@/assets/seedlings/sugarcane_seedling.png"),
+  sunflower: require("@/assets/seedlings/sunflower_seedling.png"),
+  tea_leaves: require("@/assets/seedlings/tea_leaves.png"),
+  tomato: require("@/assets/seedlings/tomatoes_seedling.png"),
+  vanilla: require("@/assets/seedlings/vanilla_seedling.png"),
+  wheat: require("@/assets/seedlings/wheat_seedling.png"),
 };
 
 const farmIcon = require("@/assets/inapp-icons/home-tab-icons/Vegetable-Rosemary--Streamline-Ultimate.png");
@@ -37,23 +60,28 @@ const HOME_TABS = [
   { id: "craft", icon: craftIcon },
 ];
 
-const TAB_LABELS: Record<HomeTabType, string> = {
-  farm: "Farm",
-  ranch: "Ranch",
-  craft: "Craft",
-};
-
-const TAB_DESCRIPTIONS: Record<HomeTabType, string> = {
-  farm: "Plant & harvest crops",
-  ranch: "Raise your animals",
-  craft: "Craft & process goods",
-};
+function toBackendSeedInventoryKey(cropId: string): string {
+  switch (cropId) {
+    case "coffee_beans":
+      return "seed:coffee";
+    case "tea_leaves":
+      return "seed:tea";
+    case "sapling_patch":
+      return "seed:sapling";
+    default:
+      return `seed:${cropId}`;
+  }
+}
 
 export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState<HomeTabType>("farm");
   const [inventoryVisible, setInventoryVisible] = useState(false);
   const [marketVisible, setMarketVisible] = useState(false);
   const [seedSelectorVisible, setSeedSelectorVisible] = useState(false);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const getValidAccessToken = useAuthStore(
+    (state) => state.getValidAccessToken,
+  );
 
   const selectedCropId = useFarmStore((state) => state.selectedCropId);
 
@@ -61,18 +89,25 @@ export default function HomeScreen() {
     Object.values(state.items).reduce((acc, item) => acc + item.quantity, 0),
   );
   const selectedCropQuantity = useInventoryStore(
-    (state) => state.items[selectedCropId]?.quantity || 0,
+    (state) => state.items[toBackendSeedInventoryKey(selectedCropId)]?.quantity || 0,
   );
 
-  // Ready-to-harvest count for the status strip
-  const readyCount = useFarmStore(
-    (state) =>
-      Object.values(state.plots).filter((p) => p.status === "ready").length,
-  );
-  const plantedCount = useFarmStore(
-    (state) =>
-      Object.values(state.plots).filter((p) => p.status === "planted").length,
-  );
+  useEffect(() => {
+    let mounted = true;
+    const ensureSocket = async () => {
+      if (!isAuthenticated) return;
+      if (websocketManager.isConnected()) return;
+
+      const token = await getValidAccessToken();
+      if (!mounted || !token) return;
+      websocketManager.connect(token);
+    };
+
+    ensureSocket();
+    return () => {
+      mounted = false;
+    };
+  }, [getValidAccessToken, isAuthenticated]);
 
   return (
     <ThemedView style={styles.container}>
@@ -83,38 +118,6 @@ export default function HomeScreen() {
           activeTabId={activeTab}
           onTabPress={(id) => setActiveTab(id as HomeTabType)}
         />
-
-        {/* ── TAB CONTEXT STRIP ── */}
-        <View style={styles.contextStrip}>
-          <View>
-            <Text style={styles.contextTitle}>{TAB_LABELS[activeTab]}</Text>
-            <Text style={styles.contextSub}>{TAB_DESCRIPTIONS[activeTab]}</Text>
-          </View>
-
-          {/* Farm-specific live stats */}
-          {activeTab === "farm" && (
-            <View style={styles.farmStats}>
-              {readyCount > 0 && (
-                <View style={styles.statPill}>
-                  <View
-                    style={[styles.statDot, { backgroundColor: "#71B312" }]}
-                  />
-                  <Text style={styles.statPillText}>{readyCount} ready</Text>
-                </View>
-              )}
-              {plantedCount > 0 && (
-                <View style={styles.statPill}>
-                  <View
-                    style={[styles.statDot, { backgroundColor: "#FFB038" }]}
-                  />
-                  <Text style={styles.statPillText}>
-                    {plantedCount} growing
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-        </View>
 
         {/* ── MAIN SCROLL AREA ── */}
         <ScrollView
@@ -168,7 +171,7 @@ export default function HomeScreen() {
               onPress={() => setSeedSelectorVisible(true)}
             >
               <Image
-                source={cropAssets[selectedCropId] || seedIcon}
+                source={seedlingAssets[selectedCropId] || seedIcon}
                 style={styles.fabImage}
                 contentFit="contain"
               />
@@ -241,58 +244,6 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-
-  // ── CONTEXT STRIP
-  contextStrip: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(3,32,24,0.06)",
-  },
-  contextTitle: {
-    fontSize: 17,
-    fontFamily: "Space Mono",
-    fontWeight: "700",
-    color: "#032018",
-    lineHeight: 20,
-  },
-  contextSub: {
-    fontSize: 11,
-    fontFamily: "Space Mono",
-    color: "rgba(3,32,24,0.40)",
-    marginTop: 2,
-  },
-  farmStats: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  statPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#F5F7F2",
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: "rgba(3,32,24,0.07)",
-  },
-  statDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  statPillText: {
-    fontSize: 11,
-    fontFamily: "Space Mono",
-    fontWeight: "700",
-    color: "#032018",
-  },
-
   // ── SCROLL
   scrollContainer: {
     flex: 1,

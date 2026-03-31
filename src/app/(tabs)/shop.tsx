@@ -22,6 +22,7 @@ import { useCountdown } from "@/hooks/use-countdown";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useGameStore } from "@/store/game-store";
 import { useInventoryStore } from "@/store/inventory-store";
+import { useMarketStore } from "@/store/market-store";
 import { FlashList } from "@shopify/flash-list";
 import { ChevronRight, Search } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
@@ -58,6 +59,7 @@ export default function ShopScreen() {
   const [activeTab, setActiveTab] = useState<TabType>("featured");
   const { coins, removeCoins, addCoins } = useGameStore();
   const { addResource } = useInventoryStore();
+  const prices = useMarketStore((state) => state.prices);
 
   const flashSaleTimer = useCountdown(3600 * 2 + 15 * 60); // 2h 15m
   const dailyDealsTimer = useCountdown(3600 * 18 + 45 * 60); // 18h 45m
@@ -78,6 +80,15 @@ export default function ShopScreen() {
     console.log("Claimed free daily reward!");
   }, 300);
 
+  const resolveServerPrice = useCallback(
+    (item: ShopItem, mode: "seed" | "goods") => {
+      const serverKey =
+        mode === "seed" ? `seed:${item.resourceId}` : item.resourceId;
+      return prices[serverKey] ?? item.price;
+    },
+    [prices],
+  );
+
   const renderFeaturedItem = useCallback(
     ({ item }: { item: ShopItem }) => (
       <Pressable style={styles.featuredCard} onPress={() => handleBuy(item)}>
@@ -87,10 +98,13 @@ export default function ShopScreen() {
         </View>
         <Image source={item.img} style={styles.itemImg} resizeMode="contain" />
         <Text style={styles.itemNameText}>{item.name}</Text>
-        <ItemPrice price={item.price} oldPrice={item.oldPrice} />
+        <ItemPrice
+          price={resolveServerPrice(item, "goods")}
+          oldPrice={item.oldPrice}
+        />
       </Pressable>
     ),
-    [],
+    [handleBuy, resolveServerPrice],
   );
 
   const renderSeedItem = useCallback(
@@ -110,12 +124,15 @@ export default function ShopScreen() {
           <View>
             <Text style={styles.seedQtyText}>{item.qty}x</Text>
             <Text style={styles.seedNameText}>{item.name} Seeds</Text>
-            <ItemPrice price={item.price} oldPrice={item.oldPrice} />
+            <ItemPrice
+              price={resolveServerPrice(item, "seed")}
+              oldPrice={item.oldPrice}
+            />
           </View>
         </View>
       </Pressable>
     ),
-    [],
+    [handleBuy, resolveServerPrice],
   );
 
   const renderTokenPack = useCallback(

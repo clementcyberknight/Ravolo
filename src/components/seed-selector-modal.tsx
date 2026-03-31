@@ -13,22 +13,31 @@ import { useInventoryStore } from "@/store/inventory-store";
 import { useFarmStore } from "@/store/farm-store";
 import { CROP_GUIDE, CropType } from "@/constants/crops";
 
-// Reusing asset map concept
-const ASSET_MAP: Record<string, any> = {
-  wheat: require("@/assets/image/assets_images_icons_crops_wheat.webp"),
-  corn: require("@/assets/image/assets_images_icons_crops_corn.webp"),
-  carrot: require("@/assets/image/assets_images_icons_crops_carrot.webp"),
-  potato: require("@/assets/image/assets_images_icons_crops_potato.webp"),
-  tomato: require("@/assets/image/assets_images_icons_crops_tomato.webp"),
-  strawberry: require("@/assets/image/assets_images_icons_crops_strawberry.webp"),
-  rice: require("@/assets/image/assets_images_icons_crops_rice.webp"),
-  soybean: require("@/assets/image/assets_images_icons_crops_soybean.webp"),
-  onion: require("@/assets/image/assets_images_icons_crops_onion.webp"),
-  pepper: require("@/assets/image/assets_images_icons_crops_pepper.webp"),
-  sunflower: require("@/assets/image/assets_images_icons_crops_sunflower.webp"),
-  sugarcane: require("@/assets/image/assets_images_icons_crops_sugarcane.webp"),
-  cacao: require("@/assets/image/assets_images_icons_crops_cacao.webp"),
-  coffee_beans: require("@/assets/image/assets_images_icons_crops_coffee_beans.webp"),
+const SEEDLING_ASSET_MAP: Record<string, any> = {
+  cacao: require("@/assets/seedlings/cacao_seedling.png"),
+  carrot: require("@/assets/seedlings/carrot_seedling.png"),
+  chili: require("@/assets/seedlings/chile_seedling.png"),
+  coffee_beans: require("@/assets/seedlings/coffee_beans.png"),
+  corn: require("@/assets/seedlings/corn_seedling.png"),
+  cotton: require("@/assets/seedlings/cotton_seedling.png"),
+  grapes: require("@/assets/seedlings/grape_seedling.png"),
+  lavender: require("@/assets/seedlings/lavender_seedling.png"),
+  mud_pit: require("@/assets/seedlings/mud_pit.png"),
+  oat: require("@/assets/seedlings/oat_seedling.png"),
+  onion: require("@/assets/seedlings/onion_seedling.png"),
+  pepper: require("@/assets/seedlings/pepper_seedling.png"),
+  potato: require("@/assets/seedlings/potato_seedling.png"),
+  rice: require("@/assets/seedlings/rice_seedling.png"),
+  saffron: require("@/assets/seedlings/saffron_seedling.png"),
+  sapling_patch: require("@/assets/seedlings/sapling_patch.png"),
+  soybean: require("@/assets/seedlings/soyabeans_seedling.png"),
+  strawberry: require("@/assets/seedlings/strawberry_seedling.png"),
+  sugarcane: require("@/assets/seedlings/sugarcane_seedling.png"),
+  sunflower: require("@/assets/seedlings/sunflower_seedling.png"),
+  tea_leaves: require("@/assets/seedlings/tea_leaves.png"),
+  tomato: require("@/assets/seedlings/tomatoes_seedling.png"),
+  vanilla: require("@/assets/seedlings/vanilla_seedling.png"),
+  wheat: require("@/assets/seedlings/wheat_seedling.png"),
 };
 
 interface SeedSelectorModalProps {
@@ -41,12 +50,27 @@ export const SeedSelectorModal = ({ visible, onClose }: SeedSelectorModalProps) 
   const items = useInventoryStore((state) => state.items);
   const setSelectedCropId = useFarmStore((state) => state.setSelectedCropId);
 
-  // Filter for seeds (crops) that have quantity > 0
+  const toLocalCropId = (seedId: string): CropType => {
+    const rawId = seedId.startsWith("seed:") ? seedId.slice("seed:".length) : seedId;
+
+    switch (rawId) {
+      case "coffee":
+        return "coffee_beans";
+      case "tea":
+        return "tea_leaves";
+      case "sapling":
+        return "sapling_patch";
+      default:
+        return rawId as CropType;
+    }
+  };
+
+  // Filter for actual seed inventory only.
   const seeds = Object.values(items).filter(
-    (item) => item.type === "crop" && item.quantity > 0
+    (item) => item.type === "seed" && item.quantity > 0
   );
 
-  const handleSelect = (cropId: string) => {
+  const handleSelect = (cropId: CropType) => {
     setSelectedCropId(cropId as CropType);
     onClose();
   };
@@ -69,25 +93,31 @@ export const SeedSelectorModal = ({ visible, onClose }: SeedSelectorModalProps) 
               showsHorizontalScrollIndicator={false} 
               contentContainerStyle={styles.scrollContent}
             >
-              {seeds.map((seed) => (
-                <Pressable 
-                  key={seed.id} 
-                  style={styles.seedCard}
-                  onPress={() => handleSelect(seed.id)}
-                >
-                  <View style={styles.imageContainer}>
-                    <Image
-                      source={ASSET_MAP[seed.id]}
-                      style={styles.seedImage}
-                      contentFit="contain"
-                    />
-                  </View>
-                  <Text style={styles.seedName}>{CROP_GUIDE[seed.id as CropType]?.name || seed.id}</Text>
-                  <View style={styles.quantityBadge}>
-                    <Text style={styles.quantityText}>x{seed.quantity}</Text>
-                  </View>
-                </Pressable>
-              ))}
+              {seeds.map((seed) => {
+                const cropId = toLocalCropId(seed.id);
+
+                return (
+                  <Pressable 
+                    key={seed.id} 
+                    style={styles.seedCard}
+                    onPress={() => handleSelect(cropId)}
+                  >
+                    <View style={styles.imageContainer}>
+                      <Image
+                        source={SEEDLING_ASSET_MAP[cropId]}
+                        style={styles.seedImage}
+                        contentFit="contain"
+                      />
+                    </View>
+                    <Text style={styles.seedName}>
+                      {CROP_GUIDE[cropId]?.name || cropId}
+                    </Text>
+                    <View style={styles.quantityBadge}>
+                      <Text style={styles.quantityText}>x{seed.quantity}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
           ) : (
             <View style={styles.emptyContainer}>

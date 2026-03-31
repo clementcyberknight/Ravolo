@@ -5,6 +5,7 @@ import { createJSONStorage, persist, StateStorage } from "zustand/middleware";
 
 import {
   AuthProfile,
+  logoutAuth,
   refreshAuthToken,
   VerifyResponse,
 } from "@/services/auth-api";
@@ -31,6 +32,8 @@ interface AuthState {
   getAccessToken: () => Promise<string | null>;
   getRefreshToken: () => Promise<string | null>;
   refreshSession: () => Promise<string | null>;
+  getValidAccessToken: () => Promise<string | null>;
+  logout: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -74,12 +77,56 @@ export const useAuthStore = create<AuthState>()(
           return null;
         }
 
-        const refreshed = await refreshAuthToken(refreshToken);
-        await get().setSession({
-          ...refreshed,
-          isNewUser: false,
-        });
-        return refreshed.accessToken;
+        try {
+          const refreshed = await refreshAuthToken(refreshToken);
+          await get().setSession({
+            ...refreshed,
+            isNewUser: false,
+          });
+          return refreshed.accessToken;
+        } catch {
+          await get().clearSession();
+          return null;
+        }
+      },
+      getValidAccessToken: async () => {
+        const accessToken = await get().getAccessToken();
+        const refreshToken = await get().getRefreshToken();
+
+        if (!accessToken) {
+          if (!refreshToken) return null;
+          return get().refreshSession();
+        }
+
+        const accessExpiresAt = get().accessExpiresAt;
+        if (typeof accessExpiresAt !== "number") {
+          // If we don't know expiry, treat the current token as usable.
+          return accessToken;
+        }
+
+        const nowSec = Math.floor(Date.now() / 1000);
+        const skewSec = 120; // refresh when <= 2 min remaining
+        const secondsLeft = accessExpiresAt - nowSec;
+
+        if (secondsLeft > skewSec) {
+          return accessToken;
+        }
+
+        // Token is close to expiry; refresh first.
+        if (!refreshToken) return null;
+        return get().refreshSession();
+      },
+      logout: async () => {
+        const refreshToken = await get().getRefreshToken();
+        if (refreshToken) {
+          try {
+            await logoutAuth(refreshToken);
+          } catch {
+            // Even if server logout fails, still clear local session.
+          }
+        }
+
+        await get().clearSession();
       },
     }),
     {

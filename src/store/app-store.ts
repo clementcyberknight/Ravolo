@@ -22,6 +22,7 @@ const zustandStorage: StateStorage = {
 interface AppState {
   hasCompletedOnboarding: boolean;
   completeOnboarding: () => void;
+  resetOnboarding: () => void;
   _hasHydrated: boolean;
   setHasHydrated: (state: boolean) => void;
 }
@@ -31,6 +32,7 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       hasCompletedOnboarding: false,
       completeOnboarding: () => set({ hasCompletedOnboarding: true }),
+      resetOnboarding: () => set({ hasCompletedOnboarding: false }),
       _hasHydrated: false,
       setHasHydrated: (state) => set({ _hasHydrated: state }),
     }),
