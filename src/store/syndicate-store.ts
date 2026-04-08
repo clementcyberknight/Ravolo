@@ -27,8 +27,10 @@ export interface MySyndicate {
 
 interface SyndicateState {
   joinedSyndicate: MySyndicate | null;
+  syndicates: any[];
   joinSyndicate: (syndicate: MySyndicate) => void;
   leaveSyndicate: () => void;
+  setSyndicates: (syndicates: any[]) => void;
   _hasHydrated: boolean;
   setHasHydrated: (state: boolean) => void;
 }
@@ -37,8 +39,10 @@ export const useSyndicateStore = create<SyndicateState>()(
   persist(
     (set) => ({
       joinedSyndicate: null,
+      syndicates: [],
       joinSyndicate: (syndicate) => set({ joinedSyndicate: syndicate }),
       leaveSyndicate: () => set({ joinedSyndicate: null }),
+      setSyndicates: (syndicates) => set({ syndicates }),
       _hasHydrated: false,
       setHasHydrated: (state) => set({ _hasHydrated: state }),
     }),

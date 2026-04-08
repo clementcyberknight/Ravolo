@@ -459,13 +459,61 @@ const FarmTile = memo(function FarmTile({ id }: { id: string }) {
 // ── Buy Plot Tile ─────────────────────────────────────────────────────────────
 
 const BuyPlotTile = memo(function BuyPlotTile() {
-  const buyPlot = useFarmStore((state) => state.buyPlot);
+  const [isBuyingPlot, setIsBuyingPlot] = useState(false);
+
+  const handleBuyPlot = useCallback(async () => {
+    if (isBuyingPlot) {
+      return;
+    }
+
+    setIsBuyingPlot(true);
+    const requestId = generateRequestId();
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const unsubscribe = websocketManager.onMessage((message) => {
+          if (message.type === "BUY_PLOT_OK") {
+            unsubscribe();
+            resolve();
+            return;
+          }
+
+          if (message.type === "ERROR") {
+            unsubscribe();
+            reject(new Error(message.message || message.code || "BUY_PLOT_FAILED"));
+          }
+        });
+
+        websocketManager
+          .send(
+            "BUY_PLOT",
+            {
+              requestId,
+            },
+            false,
+          )
+          .catch((error) => {
+            unsubscribe();
+            reject(error);
+          });
+      });
+    } catch (error) {
+      console.log("[farm] buy plot failed", error);
+    } finally {
+      setIsBuyingPlot(false);
+    }
+  }, [isBuyingPlot]);
 
   return (
-    <Pressable style={styles.tileWrapper} onPress={buyPlot}>
+    <Pressable style={styles.tileWrapper} onPress={handleBuyPlot}>
       {({ pressed }) => (
         <View
-          style={[styles.tile, styles.tileBuy, pressed && styles.tilePressed]}
+          style={[
+            styles.tile,
+            styles.tileBuy,
+            pressed && !isBuyingPlot && styles.tilePressed,
+            isBuyingPlot && styles.tileDisabled,
+          ]}
         >
           <Image
             source={unlockImage}

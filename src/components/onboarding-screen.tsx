@@ -69,6 +69,7 @@ export function OnboardingScreen() {
   const setSeekerAuthenticated = useWalletStore(
     (state) => state.setSeekerAuthenticated,
   );
+  const restoreLocalWallet = useWalletStore((state) => state.restoreLocalWallet);
   const createLocalWallet = useWalletStore((state) => state.createLocalWallet);
   const getLocalWalletSecretKey = useWalletStore(
     (state) => state.getLocalWalletSecretKey,
@@ -115,8 +116,9 @@ export function OnboardingScreen() {
         websocketManager.connect(authResult.accessToken);
         setSeekerAuthenticated(true);
       } else {
-        setAuthMode("creating_wallet");
-        const wallet = await createLocalWallet();
+        const existingWallet = await restoreLocalWallet();
+        setAuthMode(existingWallet ? "authenticating" : "creating_wallet");
+        const wallet = existingWallet ?? (await createLocalWallet());
         const localSecretKey = await getLocalWalletSecretKey();
         if (!localSecretKey) {
           throw new Error("Local wallet private key is missing");

@@ -4,7 +4,9 @@ import { create } from "zustand";
 import { createJSONStorage, persist, StateStorage } from "zustand/middleware";
 
 import {
+  AuthApiError,
   AuthProfile,
+  isRefreshSessionTerminalError,
   logoutAuth,
   refreshAuthToken,
   VerifyResponse,
@@ -23,6 +25,21 @@ const zustandStorage: StateStorage = {
 const ACCESS_TOKEN_KEY = "auth.accessToken";
 const REFRESH_TOKEN_KEY = "auth.refreshToken";
 
+let refreshInFlight: Promise<string | null> | null = null;
+
+function debugTokenLog(label: string, payload?: unknown) {
+  if (payload === undefined) {
+    console.log(`[auth] ${label}`);
+    return;
+  }
+
+  try {
+    console.log(`[auth] ${label}`, JSON.stringify(payload, null, 2));
+  } catch {
+    console.log(`[auth] ${label}`, payload);
+  }
+}
+
 interface AuthState {
   isAuthenticated: boolean;
   accessExpiresAt: number | null;
@@ -37,6 +54,14 @@ interface AuthState {
   logout: () => Promise<void>;
 }
 
+function isValidSessionPayload(payload: VerifyResponse) {
+  return (
+    typeof payload.accessToken === "string" &&
+    typeof payload.refreshToken === "string" &&
+    typeof payload.accessExpiresAt === "number"
+  );
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -44,6 +69,16 @@ export const useAuthStore = create<AuthState>()(
       accessExpiresAt: null,
       profile: null,
       setSession: async (payload) => {
+        debugTokenLog("setSession() tokens", {
+          accessToken: payload.accessToken,
+          refreshToken: payload.refreshToken,
+          accessExpiresAt: payload.accessExpiresAt,
+        });
+
+        if (!isValidSessionPayload(payload)) {
+          throw new Error("Invalid session payload");
+        }
+
         await Promise.all([
           SecureStore.setItemAsync(ACCESS_TOKEN_KEY, payload.accessToken, {
             keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -76,27 +111,67 @@ export const useAuthStore = create<AuthState>()(
           profile: null,
         });
       },
-      getAccessToken: async () => SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
-      getRefreshToken: async () => SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
+      getAccessToken: async () => {
+        const accessToken = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
+        debugTokenLog("getAccessToken()", { accessToken });
+        return accessToken;
+      },
+      getRefreshToken: async () => {
+        const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+        debugTokenLog("getRefreshToken()", { refreshToken });
+        return refreshToken;
+      },
       refreshSession: async () => {
+        if (refreshInFlight) {
+          return refreshInFlight;
+        }
+
         const refreshToken = await get().getRefreshToken();
         if (!refreshToken) {
+          debugTokenLog("refreshSession() skipped - no refresh token");
           return null;
         }
 
-        try {
-          const refreshed = await refreshAuthToken(refreshToken);
-          await get().setSession({
-            ...refreshed,
-            isNewUser: false,
-          });
-          return refreshed.accessToken;
-        } catch {
-          // Never delete local credentials on transient refresh failure.
-          // Only an explicit logout should clear device-stored auth state.
-          get().markSessionAvailable();
-          return null;
-        }
+        refreshInFlight = (async () => {
+          try {
+            debugTokenLog("refreshSession() request", { refreshToken });
+            const refreshed = await refreshAuthToken(refreshToken);
+            debugTokenLog("refreshSession() response", {
+              accessToken: refreshed.accessToken,
+              refreshToken: refreshed.refreshToken,
+              accessExpiresAt: refreshed.accessExpiresAt,
+            });
+            await get().setSession({
+              ...refreshed,
+              isNewUser: false,
+            });
+            return refreshed.accessToken;
+          } catch (error) {
+            debugTokenLog("refreshSession() failed", {
+              refreshToken,
+              code: error instanceof AuthApiError ? error.code : undefined,
+              status: error instanceof AuthApiError ? error.status : undefined,
+              error: error instanceof Error ? error.message : String(error),
+            });
+
+            if (isRefreshSessionTerminalError(error)) {
+              debugTokenLog(
+                `refreshSession() terminal error (${error.code}) - clearing auth session`,
+              );
+              await get().clearSession();
+              return null;
+            }
+
+            // Never delete local credentials on transient refresh failure.
+            // Only an explicit invalid/expired refresh token should clear auth.
+            get().markSessionAvailable();
+            return null;
+          } finally {
+            refreshInFlight = null;
+          }
+        })();
+
+        return refreshInFlight;
       },
       getValidAccessToken: async () => {
         const accessToken = await get().getAccessToken();
@@ -131,6 +206,10 @@ export const useAuthStore = create<AuthState>()(
         const refreshedToken = await get().refreshSession();
         if (refreshedToken) {
           return refreshedToken;
+        }
+
+        if (!get().isAuthenticated) {
+          return null;
         }
 
         // Keep the last known access token locally so the user is not

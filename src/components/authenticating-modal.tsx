@@ -1,11 +1,5 @@
 import React from "react";
-import {
-  ActivityIndicator,
-  Modal,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Modal, StyleSheet, Text, View } from "react-native";
 
 interface AuthenticatingModalProps {
   visible: boolean;
@@ -21,7 +15,7 @@ export const AuthenticatingModal = ({
   const subtitle =
     mode === "creating_wallet"
       ? "Setting up your secure Solana wallet..."
-      : "Checking your Seeker status...";
+      : "Checking your device status...";
 
   return (
     <Modal visible={visible} transparent animationType="slide">

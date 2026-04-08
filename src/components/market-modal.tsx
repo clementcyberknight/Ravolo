@@ -3,8 +3,9 @@ import { websocketManager } from "@/services/websocket-manager";
 import { useGameStore } from "@/store/game-store";
 import { useInventoryStore } from "@/store/inventory-store";
 import { useMarketStore } from "@/store/market-store";
+import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   Modal,
@@ -98,6 +99,10 @@ function formatMarketName(id: string) {
 
 function getMarketAsset(id: string) {
   return SEEDLING_ASSET_MAP[id] || MARKET_ASSET_MAP[id] || coinIcon;
+}
+
+function hasMappedMarketAsset(id: string) {
+  return Boolean(SEEDLING_ASSET_MAP[id] || MARKET_ASSET_MAP[id]);
 }
 
 function generateRequestId() {
@@ -255,6 +260,8 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
   const [buyModalQuantity, setBuyModalQuantity] = useState(1);
   const [sellModalItemId, setSellModalItemId] = useState<string | null>(null);
   const [sellModalQuantity, setSellModalQuantity] = useState(1);
+  const [marketSearchQuery, setMarketSearchQuery] = useState("");
+  const [saleSearchQuery, setSaleSearchQuery] = useState("");
 
   // Create Request State
   const [isCreatingRequest, setIsCreatingRequest] = useState(false);
@@ -267,8 +274,12 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
   const marketPrices = useMarketStore((state) => state.prices);
 
   const inventoryItems = useInventoryStore((state) => state.items);
-  const inventoryList = Object.values(inventoryItems).filter(
-    (item) => item.quantity > 0,
+  const inventoryList = useMemo(
+    () =>
+      Object.values(inventoryItems)
+        .filter((item) => item.quantity > 0)
+        .sort((a, b) => b.quantity - a.quantity || a.id.localeCompare(b.id)),
+    [inventoryItems],
   );
   const maxSaleQuantity = selectedInventoryId
     ? inventoryItems[selectedInventoryId]?.quantity || 0
@@ -276,7 +287,7 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
   const sellModalAvailableQuantity = sellModalItemId
     ? inventoryItems[sellModalItemId]?.quantity || 0
     : 0;
-  const liveMarketItems = useMemo(
+  const marketItems = useMemo(
     () =>
       Object.entries(marketPrices)
         .map(([id, price]) => ({
@@ -289,10 +300,53 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
           sell: price.sell,
           image: getMarketAsset(id),
           isSeed: id.startsWith("seed:"),
+          ownedQuantity: inventoryItems[id]?.quantity || 0,
+          usesFallbackAsset: !hasMappedMarketAsset(id),
         }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [marketPrices],
+        .sort((a, b) => {
+          if ((b.ownedQuantity > 0) !== (a.ownedQuantity > 0)) {
+            return Number(b.ownedQuantity > 0) - Number(a.ownedQuantity > 0);
+          }
+
+          if (b.ownedQuantity !== a.ownedQuantity) {
+            return b.ownedQuantity - a.ownedQuantity;
+          }
+
+          return a.name.localeCompare(b.name);
+        }),
+    [inventoryItems, marketPrices],
   );
+  const normalizedMarketSearch = marketSearchQuery.trim().toLowerCase();
+  const liveMarketItems = useMemo(
+    () =>
+      normalizedMarketSearch
+        ? marketItems.filter((item) =>
+            `${item.id} ${item.name}`
+              .toLowerCase()
+              .includes(normalizedMarketSearch),
+          )
+        : marketItems,
+    [marketItems, normalizedMarketSearch],
+  );
+  const missingMarketAssetIds = useMemo(
+    () =>
+      marketItems
+        .filter((item) => item.usesFallbackAsset)
+        .map((item) => item.id),
+    [marketItems],
+  );
+  const filteredInventoryList = useMemo(() => {
+    const normalizedSaleSearch = saleSearchQuery.trim().toLowerCase();
+    if (!normalizedSaleSearch) {
+      return inventoryList;
+    }
+
+    return inventoryList.filter((item) =>
+      `${item.id} ${formatMarketName(item.id)}`
+        .toLowerCase()
+        .includes(normalizedSaleSearch),
+    );
+  }, [inventoryList, saleSearchQuery]);
   const buyModalItem = buyModalItemId
     ? liveMarketItems.find((item) => item.id === buyModalItemId) || null
     : null;
@@ -361,9 +415,12 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
   };
 
   const handleBuyMarketItem = async (itemId: string, quantity: number) => {
-    const marketItem = liveMarketItems.find((item) => item.id === itemId);
-    const maxAffordableQuantity = marketItem
-      ? Math.max(1, Math.floor(coins / Math.max(1, marketItem.buy)))
+    const currentPrices = useMarketStore.getState().prices;
+    const priceEntry = currentPrices[itemId];
+    const currentCoins = useGameStore.getState().coins;
+
+    const maxAffordableQuantity = priceEntry
+      ? Math.max(1, Math.floor(currentCoins / Math.max(1, priceEntry.buy)))
       : 1;
     const safeQuantity = Math.max(1, Math.min(quantity, maxAffordableQuantity));
     const requestId = generateRequestId();
@@ -408,14 +465,16 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
   };
 
   const openBuyModal = (itemId: string) => {
-    const marketItem = liveMarketItems.find((item) => item.id === itemId);
-    if (!marketItem) {
+    const currentPrices = useMarketStore.getState().prices;
+    const priceEntry = currentPrices[itemId];
+    if (!priceEntry) {
       return;
     }
 
+    const currentCoins = useGameStore.getState().coins;
     const maxAffordableQuantity = Math.max(
       0,
-      Math.floor(coins / Math.max(1, marketItem.buy)),
+      Math.floor(currentCoins / Math.max(1, priceEntry.buy)),
     );
 
     setBuyModalItemId(itemId);
@@ -423,7 +482,7 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
   };
 
   const handleSellMarketItem = async (itemId: string, quantity: number) => {
-    const ownedQuantity = inventoryItems[itemId]?.quantity || 0;
+    const ownedQuantity = useInventoryStore.getState().items[itemId]?.quantity || 0;
     const safeQuantity = Math.max(1, Math.min(quantity, ownedQuantity));
     if (ownedQuantity <= 0) {
       Alert.alert("Nothing to sell", `You do not have any ${formatMarketName(itemId)} to sell.`);
@@ -472,7 +531,7 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
   };
 
   const openSellModal = (itemId: string) => {
-    const ownedQuantity = inventoryItems[itemId]?.quantity || 0;
+    const ownedQuantity = useInventoryStore.getState().items[itemId]?.quantity || 0;
     if (ownedQuantity <= 0) {
       Alert.alert("Nothing to sell", `You do not have any ${formatMarketName(itemId)} to sell.`);
       return;
@@ -481,6 +540,98 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
     setSellModalItemId(itemId);
     setSellModalQuantity(1);
   };
+
+  const renderMarketItem = useCallback(
+    ({ item }: { item: (typeof liveMarketItems)[number] }) => (
+      <View style={styles.playerSaleCard}>
+        <View style={styles.cardLeft}>
+          <Image
+            source={item.image}
+            style={styles.saleItemCover}
+            contentFit="contain"
+          />
+          <View style={styles.cardInfo}>
+            <Text style={styles.saleItemTitle}>{item.name}</Text>
+            <Text style={styles.sellerName}>
+              {item.ownedQuantity > 0
+                ? `Owned ${item.ownedQuantity}`
+                : item.isSeed
+                  ? "Seedling"
+                  : "Marketplace"}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.marketPriceColumn}>
+          <Pressable
+            style={[
+              styles.salePriceBox,
+              activeMarketActionId === `buy:${item.id}` && styles.buyButtonDisabled,
+            ]}
+            onPress={() => openBuyModal(item.id)}
+            disabled={activeMarketActionId === `buy:${item.id}`}
+          >
+            <Text style={styles.salePriceLabel}>Buy</Text>
+            <Text style={styles.salePriceText}>{item.buy.toLocaleString()}</Text>
+            <Image
+              source={coinIcon}
+              style={styles.buyButtonIcon}
+              contentFit="contain"
+            />
+          </Pressable>
+          <Pressable
+            style={[
+              styles.salePriceBox,
+              item.ownedQuantity <= 0 && styles.buyButtonDisabled,
+              activeMarketActionId === `sell:${item.id}` && styles.buyButtonDisabled,
+            ]}
+            onPress={() => openSellModal(item.id)}
+            disabled={
+              item.ownedQuantity <= 0 ||
+              activeMarketActionId === `sell:${item.id}`
+            }
+          >
+            <Text style={styles.salePriceLabel}>Sell</Text>
+            <Text style={styles.salePriceText}>{item.sell.toLocaleString()}</Text>
+            <Image
+              source={coinIcon}
+              style={styles.buyButtonIcon}
+              contentFit="contain"
+            />
+          </Pressable>
+        </View>
+      </View>
+    ),
+    [activeMarketActionId],
+  );
+
+  const renderSaleInventoryItem = useCallback(
+    ({ item }: { item: (typeof filteredInventoryList)[number] }) => {
+      const isSelected = selectedInventoryId === item.id;
+
+      return (
+        <Pressable
+          style={[
+            styles.invItemCard,
+            isSelected && styles.invItemCardSelected,
+          ]}
+          onPress={() => {
+            setSelectedInventoryId(item.id);
+            setSaleQuantity(1);
+            setSalePrice(10);
+          }}
+        >
+          <Image
+            source={getMarketAsset(item.id)}
+            style={styles.invItemImage}
+            contentFit="contain"
+          />
+          <Text style={styles.invItemTitle}>{formatMarketName(item.id)}</Text>
+          <Text style={styles.invItemCount}>x{item.quantity}</Text>
+        </Pressable>
+      );
+    },
+    [selectedInventoryId],
+  );
 
   const submitRequest = () => {
     const cost = requestQuantity * requestPrice;
@@ -574,63 +725,26 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
 
   const renderAllSalesTab = () => (
     <View style={styles.listContainer}>
-      {liveMarketItems.map((sale) => (
-        <View key={sale.id} style={styles.playerSaleCard}>
-          <View style={styles.cardLeft}>
-            <Image
-              source={sale.image}
-              style={styles.saleItemCover}
-              contentFit="contain"
-            />
-            <View style={styles.cardInfo}>
-              <Text style={styles.saleItemTitle}>
-                {sale.name}
-              </Text>
-              <Text style={styles.sellerName}>
-                {sale.isSeed ? "Seedling" : "Marketplace"}
-              </Text>
-            </View>
+      <View style={styles.marketSearchBox}>
+        <TextInput
+          placeholder="Search market items..."
+          style={styles.marketSearchInput}
+          value={marketSearchQuery}
+          onChangeText={setMarketSearchQuery}
+        />
+      </View>
+      <Text style={styles.marketHintText}>Owned items are pinned to the top.</Text>
+      <FlashList
+        data={liveMarketItems}
+        renderItem={renderMarketItem}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.marketEmptyState}>
+            <Text style={styles.emptyStateText}>No market items found.</Text>
           </View>
-          <View style={styles.marketPriceColumn}>
-            <Pressable
-              style={[
-                styles.salePriceBox,
-                activeMarketActionId === `buy:${sale.id}` && styles.buyButtonDisabled,
-              ]}
-              onPress={() => openBuyModal(sale.id)}
-              disabled={activeMarketActionId === `buy:${sale.id}`}
-            >
-              <Text style={styles.salePriceLabel}>Buy</Text>
-              <Text style={styles.salePriceText}>{sale.buy.toLocaleString()}</Text>
-              <Image
-                source={coinIcon}
-                style={styles.buyButtonIcon}
-                contentFit="contain"
-              />
-            </Pressable>
-            <Pressable
-              style={[
-                styles.salePriceBox,
-                (inventoryItems[sale.id]?.quantity || 0) <= 0 && styles.buyButtonDisabled,
-                activeMarketActionId === `sell:${sale.id}` && styles.buyButtonDisabled,
-              ]}
-              onPress={() => openSellModal(sale.id)}
-              disabled={
-                (inventoryItems[sale.id]?.quantity || 0) <= 0 ||
-                activeMarketActionId === `sell:${sale.id}`
-              }
-            >
-              <Text style={styles.salePriceLabel}>Sell</Text>
-              <Text style={styles.salePriceText}>{sale.sell.toLocaleString()}</Text>
-              <Image
-                source={coinIcon}
-                style={styles.buyButtonIcon}
-                contentFit="contain"
-              />
-            </Pressable>
-          </View>
-        </View>
-      ))}
+        }
+      />
     </View>
   );
 
@@ -758,42 +872,27 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
               <TextInput
                 placeholder="Search items..."
                 style={styles.createSaleSearchInput}
+                value={saleSearchQuery}
+                onChangeText={setSaleSearchQuery}
               />
             </View>
           </View>
 
-          <ScrollView style={styles.createSaleGridScroll}>
-            <View style={styles.createSaleGrid}>
-              {inventoryList.map((item) => {
-                const isSelected = selectedInventoryId === item.id;
-                const asset = ASSET_MAP[item.id] || coinIcon;
-                return (
-                  <Pressable
-                    key={item.id}
-                    style={[
-                      styles.invItemCard,
-                      isSelected && styles.invItemCardSelected,
-                    ]}
-                    onPress={() => {
-                      setSelectedInventoryId(item.id);
-                      setSaleQuantity(1);
-                      setSalePrice(10);
-                    }}
-                  >
-                    <Image
-                      source={asset}
-                      style={styles.invItemImage}
-                      contentFit="contain"
-                    />
-                    <Text style={styles.invItemTitle}>
-                      {item.id.charAt(0).toUpperCase() + item.id.slice(1)}
-                    </Text>
-                    <Text style={styles.invItemCount}>x{item.quantity}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </ScrollView>
+          <View style={styles.createSaleGridScroll}>
+            <FlashList
+              data={filteredInventoryList}
+              renderItem={renderSaleInventoryItem}
+              keyExtractor={(item) => item.id}
+              numColumns={3}
+              contentContainerStyle={styles.createSaleGrid}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <View style={styles.marketEmptyState}>
+                  <Text style={styles.emptyStateText}>No inventory items found.</Text>
+                </View>
+              }
+            />
+          </View>
 
           <View
             style={[
@@ -1384,6 +1483,8 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
   // --- MAIN LAYOUT ---
   if (!visible) return null;
 
+  console.log("[market] fallback asset ids", missingMarketAssetIds);
+
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View style={[styles.container, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
@@ -1523,6 +1624,34 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFFFFF" },
   scrollContent: { paddingBottom: 100 },
+  marketSearchBox: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 48,
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  marketSearchInput: {
+    fontSize: 16,
+    color: "#111",
+  },
+  marketHintText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#7A828A",
+    marginBottom: 8,
+  },
+  marketEmptyState: {
+    paddingVertical: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyStateText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#7A828A",
+  },
   topTabs: {
     flexDirection: "row",
     backgroundColor: "#EFF1F5",
@@ -1644,6 +1773,7 @@ const styles = StyleSheet.create({
     borderColor: "#EBEBEB",
     borderRadius: 16,
     padding: 16,
+    marginBottom: 14,
   },
   saleItemCover: { width: 40, height: 40, marginRight: 16 },
   saleItemTitle: { fontSize: 16, fontWeight: "800", color: "#1A1A1A" },
@@ -1826,10 +1956,8 @@ const styles = StyleSheet.create({
   createSaleSearchInput: { fontSize: 16 },
   createSaleGridScroll: { flex: 1 },
   createSaleGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
     paddingHorizontal: 16,
-    gap: 16,
+    paddingBottom: 16,
   },
   invItemCard: {
     width: "30%",

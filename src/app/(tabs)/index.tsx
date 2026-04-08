@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import React, { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CraftingGrid } from "@/components/crafting-grid";
@@ -16,6 +16,7 @@ import { websocketManager } from "@/services/websocket-manager";
 import { useAuthStore } from "@/store/auth-store";
 import { useFarmStore } from "@/store/farm-store";
 import { useInventoryStore } from "@/store/inventory-store";
+import { useNetworkStore } from "@/store/network-store";
 
 const inventoryIcon = require("@/assets/image/assets_images_icons_misc_box.webp");
 const marketIcon = require("@/assets/image/assets_images_icons_misc_market.webp");
@@ -93,11 +94,21 @@ export default function HomeScreen() {
       state.items[toBackendSeedInventoryKey(selectedCropId)]?.quantity || 0,
   );
 
+  const isOnline = useNetworkStore((s) => s.isOnline);
+
   useEffect(() => {
     let mounted = true;
     const ensureSocket = async () => {
       if (!isAuthenticated) return;
       if (websocketManager.isConnected()) return;
+
+      if (!isOnline) {
+        Alert.alert(
+          "You're offline",
+          "Connect to the internet to sync your farm and use the market.",
+        );
+        return;
+      }
 
       const token = await getValidAccessToken();
       if (!mounted || !token) return;
@@ -108,7 +119,7 @@ export default function HomeScreen() {
     return () => {
       mounted = false;
     };
-  }, [getValidAccessToken, isAuthenticated]);
+  }, [getValidAccessToken, isAuthenticated, isOnline]);
 
   return (
     <ThemedView style={styles.container}>

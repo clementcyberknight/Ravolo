@@ -1,10 +1,10 @@
 import { useInventoryStore } from "@/store/inventory-store";
+import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,7 +17,12 @@ export const ASSET_MAP: Record<string, any> = {
   wheat: require("@/assets/image/assets_images_icons_crops_wheat.webp"),
   corn: require("@/assets/image/assets_images_icons_crops_corn.webp"),
   carrot: require("@/assets/image/assets_images_icons_crops_carrot.webp"),
+  chili: require("@/assets/image/assets_images_icons_crops_chili.webp"),
+  coffee_beans: require("@/assets/image/assets_images_icons_crops_coffee_beans.webp"),
   potato: require("@/assets/image/assets_images_icons_crops_potato.webp"),
+  rice: require("@/assets/image/assets_images_icons_crops_rice.webp"),
+  saffron: require("@/assets/image/assets_images_icons_crops_saffron.webp"),
+  strawberry: require("@/assets/image/assets_images_icons_crops_strawberry.webp"),
   tomato: require("@/assets/image/assets_images_icons_crops_tomato.webp"),
   sugarcane: require("@/assets/image/assets_images_icons_crops_sugarcane.webp"),
   cotton: require("@/assets/image/assets_images_icons_crops_cotton.webp"),
@@ -46,7 +51,19 @@ export const ASSET_MAP: Record<string, any> = {
   cornbread: require("@/assets/image/assets_images_icons_crafts_cornbread.webp"),
   bread: require("@/assets/image/assets_images_icons_crafts_bread.webp"),
   muffin: require("@/assets/image/assets_images_icons_crafts_corn_muffins.webp"),
+  sugar: require("@/assets/image/assets_images_icons_crafts_sugar.webp"),
+  vanilla_pods: require("@/assets/image/assets_images_icons_crops_vanilla.webp"),
 };
+
+function formatItemName(id: string) {
+  return id
+    .replace(/^seed:/, "")
+    .replace(/^animal:/, "")
+    .replace(/^tool:/, "")
+    .replace(/^craft:/, "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 const boxIcon = require("@/assets/image/assets_images_icons_misc_box.webp");
 const boostIcon = require("@/assets/image/assets_images_icons_misc_boosts.webp");
@@ -64,16 +81,28 @@ export const InventoryModal = ({ visible, onClose }: InventoryModalProps) => {
   const [searchQuery, setSearchQuery] = useState("");
 
   const items = useInventoryStore((state) => state.items);
-  const totalItems = Object.values(items).reduce(
-    (acc, item) => acc + item.quantity,
-    0,
+  const totalItems = useMemo(
+    () => Object.values(items).reduce((acc, item) => acc + item.quantity, 0),
+    [items],
   );
   const maxCapacity = 120; // Hardcoded capacity based on mockup
 
-  const filteredItems = Object.values(items)
-    .filter((item) => item.quantity > 0)
-    .filter((item) => item.id.toLowerCase().includes(searchQuery.toLowerCase()))
-    .sort((a, b) => b.quantity - a.quantity); // Sort highest quantity first
+  const filteredItems = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+
+    return Object.values(items)
+      .filter((item) => item.quantity > 0)
+      .filter((item) => {
+        if (!normalizedQuery) {
+          return true;
+        }
+
+        return `${item.id} ${formatItemName(item.id)}`
+          .toLowerCase()
+          .includes(normalizedQuery);
+      })
+      .sort((a, b) => b.quantity - a.quantity || a.id.localeCompare(b.id));
+  }, [items, searchQuery]);
 
   if (!visible) return null;
 
@@ -166,30 +195,42 @@ export const InventoryModal = ({ visible, onClose }: InventoryModalProps) => {
           </View>
 
           {/* Grid View */}
-          <ScrollView
-            contentContainerStyle={styles.gridContent}
-            showsVerticalScrollIndicator={false}
-          >
+          <View style={styles.gridWrapper}>
             {activeTab === "items" ? (
-              filteredItems.map((item) => {
-                const asset = ASSET_MAP[item.id] || boxIcon; // fallback to box if undefined
-                return (
-                  <View key={item.id} style={styles.itemCard}>
-                    <Image
-                      source={asset}
-                      style={styles.itemImage}
-                      contentFit="contain"
-                    />
-                    <Text style={styles.itemCount}>{item.quantity}</Text>
+              <FlashList
+                data={filteredItems}
+                keyExtractor={(item) => item.id}
+                numColumns={4}
+                contentContainerStyle={styles.gridContent}
+                showsVerticalScrollIndicator={false}
+                renderItem={({ item }) => {
+                  const asset = ASSET_MAP[item.id] || boxIcon;
+                  return (
+                    <View style={styles.itemCard}>
+                      <Image
+                        source={asset}
+                        style={styles.itemImage}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.itemName} numberOfLines={2}>
+                        {formatItemName(item.id)}
+                      </Text>
+                      <Text style={styles.itemCount}>x{item.quantity}</Text>
+                    </View>
+                  );
+                }}
+                ListEmptyComponent={
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>No matching items found.</Text>
                   </View>
-                );
-              })
+                }
+              />
             ) : (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateText}>No boosts available.</Text>
               </View>
             )}
-          </ScrollView>
+          </View>
         </View>
 
         {/* Floating Close Button at Bottom */}
@@ -323,13 +364,14 @@ const styles = StyleSheet.create({
     tintColor: "#555",
   },
   gridContent: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 16,
     paddingBottom: 100,
   },
+  gridWrapper: {
+    flex: 1,
+  },
   itemCard: {
-    width: "21%", // 4 columns with gap
+    flex: 1,
+    margin: 6,
     aspectRatio: 0.8,
     backgroundColor: "#FFF",
     borderWidth: 1,
@@ -347,8 +389,17 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
   },
+  itemName: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    textAlign: "center",
+    minHeight: 30,
+    marginTop: 6,
+    paddingHorizontal: 6,
+  },
   itemCount: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "800",
     color: "#1A1A1A",
   },

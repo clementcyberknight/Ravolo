@@ -1,14 +1,21 @@
+import { ScreenHeader } from "@/components/screen-header";
+import { SubTabs } from "@/components/sub-tabs";
+import { ThemedView } from "@/components/themed-view";
+import { websocketManager } from "@/services/websocket-manager";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import {
   ChevronDown,
-  ChevronLeft,
   MessageSquare,
+  Plus,
   Search,
   Shield,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,14 +23,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { useSyndicateStore } from "../../store/syndicate-store";
-import { ScreenHeader } from "@/components/screen-header";
-import { SubTabs } from "@/components/sub-tabs";
-import { ThemedView } from "@/components/themed-view";
-import { Plus } from "lucide-react-native";
 
-import { MOCK_SYNDICATES, Syndicate } from "../../constants/syndicate-mock";
+import { Syndicate } from "../../constants/syndicate-mock";
 import { BottomTabInset } from "../../constants/theme";
 
 const reindeerIcon = require("@/assets/image/assets_images_icons_sanctuary_reindeer.webp");
@@ -33,14 +39,16 @@ const pandaIcon = require("@/assets/image/assets_images_icons_sanctuary_panda.we
 const flamingoIcon = require("@/assets/image/assets_images_icons_sanctuary_flamingo.webp");
 const alpacaIcon = require("@/assets/image/assets_images_icons_sanctuary_alpaca.webp");
 
-const CLAN_LOGOS = [
-  reindeerIcon,
-  phoenixIcon,
-  peacockIcon,
-  pandaIcon,
-  flamingoIcon,
-  alpacaIcon,
-];
+export const EMBLEM_MAP: Record<string, any> = {
+  "emblem:reindeer": reindeerIcon,
+  "emblem:phoenix": phoenixIcon,
+  "emblem:peacock": peacockIcon,
+  "emblem:panda": pandaIcon,
+  "emblem:flamingo": flamingoIcon,
+  "emblem:alpaca": alpacaIcon,
+};
+
+const CLAN_LOGO_KEYS = Object.keys(EMBLEM_MAP);
 
 const crownIcon = require("@/assets/image/assets_images_icons_misc_crown.webp");
 const coinsIcon = require("@/assets/image/assets_images_icons_misc_coins.webp");
@@ -101,15 +109,24 @@ const CROPS: CropShare[] = [
 
 export default function SyndicateScreen() {
   const insets = useSafeAreaInsets();
-  const { joinedSyndicate, joinSyndicate, _hasHydrated } = useSyndicateStore();
+  const {
+    joinedSyndicate,
+    joinSyndicate,
+    syndicates,
+    setSyndicates,
+    _hasHydrated,
+  } = useSyndicateStore();
   const router = useRouter();
 
-  const [selectedSyndicate, setSelectedSyndicate] = useState<Syndicate | null>(null);
+  const [selectedSyndicate, setSelectedSyndicate] = useState<Syndicate | null>(
+    null,
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [joinedMessage, setJoinedMessage] = useState<string | null>(null);
 
   const [isCreating, setIsCreating] = useState(false);
-  const [selectedLogo, setSelectedLogo] = useState(CLAN_LOGOS[0]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedLogo, setSelectedLogo] = useState(CLAN_LOGO_KEYS[0]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isPublic, setIsPublic] = useState(true);
@@ -117,8 +134,169 @@ export default function SyndicateScreen() {
   const [minGold, setMinGold] = useState("0");
 
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
-  const filteredSyndicates = MOCK_SYNDICATES.filter((s: Syndicate) =>
+  const fetchSyndicates = useCallback(async () => {
+    setIsRefreshing(true);
+    const requestId = `list-${Date.now()}`;
+
+    try {
+      await websocketManager.send(
+        "LIST_SYNDICATE",
+        {
+          requestId,
+          includePrivate: true,
+        },
+        false,
+      );
+    } catch (err) {
+      console.error("Failed to fetch syndicates:", err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (_hasHydrated) {
+      fetchSyndicates();
+    }
+  }, [_hasHydrated, fetchSyndicates]);
+
+  useEffect(() => {
+    const unsubscribe = websocketManager.onMessage((msg) => {
+      if (msg.type === "LIST_SYNDICATE_OK") {
+        const data = msg.data;
+        const rawList: unknown[] = Array.isArray(data)
+          ? data
+          : data &&
+              typeof data === "object" &&
+              Array.isArray((data as { syndicates?: unknown }).syndicates)
+            ? ((data as { syndicates: unknown[] }).syndicates ?? [])
+            : [];
+        // Map backend response to current UI model
+        const mappedList: Syndicate[] = rawList.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          rank: s.rank || 99,
+          description: s.description || "",
+          minLevel: s.levelPreferenceMin || 1,
+          minAsset: s.goldPreferenceMin || 0,
+          memberCount: s.members || 0,
+          maxMembers: 50, // Default for now
+          status: s.members >= 50 ? "Full" : "Open",
+          members: [], // Not provided in list view
+        }));
+        setSyndicates(mappedList);
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [setSyndicates]);
+
+  // Fetch full details when a syndicate is selected
+  useEffect(() => {
+    if (selectedSyndicate && selectedSyndicate.members.length === 0) {
+      setIsLoadingDetails(true);
+      const requestId = `view-${selectedSyndicate.id}`;
+      void websocketManager.send(
+        "VIEW_SYNDICATE",
+        {
+          requestId,
+          syndicateId: selectedSyndicate.id,
+        },
+        false,
+      );
+    }
+  }, [selectedSyndicate]);
+
+  useEffect(() => {
+    const unsubscribe = websocketManager.onMessage((msg) => {
+      if (msg.type === "VIEW_SYNDICATE_OK") {
+        setIsLoadingDetails(false);
+        const data = msg.data || {};
+        const membersList = (data as any).membersList || [];
+
+        setSelectedSyndicate((prev) => {
+          if (!prev || prev.id !== (data as any).id) return prev;
+          return {
+            ...prev,
+            members: membersList.map((m: any) => ({
+              id: m.userId,
+              name: m.name || `User ${m.userId.slice(0, 4)}`,
+              role:
+                m.role === "owner"
+                  ? "Leader"
+                  : m.role === "officer"
+                    ? "Elder"
+                    : "Member",
+              level: m.level || 1,
+              initial: (m.name || "M")[0].toUpperCase(),
+            })),
+          };
+        });
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  const handleJoinRequest = async (syndicate: Syndicate) => {
+    const requestId = `join-${Date.now()}`;
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const unsubscribe = websocketManager.onMessage((msg) => {
+          if (msg.type === "REQUEST_JOIN_OK") {
+            unsubscribe();
+            const status = (msg.data as any)?.status;
+            if (status === "accepted") {
+              setJoinedMessage(`Successfully joined ${syndicate.name}!`);
+              joinSyndicate({
+                id: syndicate.id,
+                name: syndicate.name,
+                rank: syndicate.rank,
+                logo: peacockIcon, // Default logo
+                role: "Initiate",
+                wealth: 0,
+                memberCount: syndicate.memberCount + 1,
+                maxMembers: syndicate.maxMembers,
+                season: "Season 4 · Start",
+              });
+              setSelectedSyndicate(null);
+            } else {
+              setJoinedMessage(`Application sent to ${syndicate.name}.`);
+            }
+            resolve();
+          } else if (
+            msg.type === "ERROR" &&
+            (msg as any).payload?.requestId === requestId
+          ) {
+            unsubscribe();
+            reject(new Error(msg.message || "Failed to join syndicate"));
+          }
+        });
+
+        void websocketManager.send(
+          "REQUEST_JOIN",
+          {
+            requestId,
+            syndicateId: syndicate.id,
+          },
+          false,
+        );
+      });
+    } catch (err) {
+      Alert.alert(
+        "Error Joining",
+        err instanceof Error ? err.message : "Request failed",
+      );
+    }
+  };
+
+  const filteredSyndicates = syndicates.filter((s: Syndicate) =>
     s.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
@@ -128,11 +306,13 @@ export default function SyndicateScreen() {
 
   // ── SYNDICATE DETAIL VIEW ─────────────────────────────────────────────────
   if (selectedSyndicate) {
-    const isFull = selectedSyndicate.memberCount >= selectedSyndicate.maxMembers;
+    const isFull =
+      selectedSyndicate.memberCount >= selectedSyndicate.maxMembers;
     const meetsReqs =
       playerStats.level >= selectedSyndicate.minLevel &&
       playerStats.totalAsset >= selectedSyndicate.minAsset;
-    const canJoin = !isFull && selectedSyndicate.status !== "Closed" && meetsReqs;
+    const canJoin =
+      !isFull && selectedSyndicate.status !== "Closed" && meetsReqs;
 
     return (
       <ThemedView style={styles.container}>
@@ -171,21 +351,7 @@ export default function SyndicateScreen() {
                     <TouchableOpacity
                       style={[styles.joinBtnSmall, !canJoin && styles.fullBtn]}
                       disabled={!canJoin}
-                      onPress={() => {
-                        joinSyndicate({
-                          id: selectedSyndicate.id,
-                          name: selectedSyndicate.name,
-                          rank: selectedSyndicate.rank,
-                          logo: phoenixIcon,
-                          role: "Initiate",
-                          wealth: 8420,
-                          memberCount: selectedSyndicate.memberCount + 1,
-                          maxMembers: selectedSyndicate.maxMembers,
-                          season: "Season 4 · Rise of Roots",
-                        });
-                        setJoinedMessage(`You joined ${selectedSyndicate.name}!`);
-                        setSelectedSyndicate(null);
-                      }}
+                      onPress={() => handleJoinRequest(selectedSyndicate)}
                     >
                       <Text
                         style={[
@@ -217,7 +383,9 @@ export default function SyndicateScreen() {
               </View>
             </View>
 
-            <Text style={styles.profileNameLarge}>{selectedSyndicate.name}</Text>
+            <Text style={styles.profileNameLarge}>
+              {selectedSyndicate.name}
+            </Text>
 
             <View style={styles.card}>
               <Text style={styles.descriptionText}>
@@ -246,23 +414,41 @@ export default function SyndicateScreen() {
                 Members ({selectedSyndicate.memberCount})
               </Text>
               <View style={styles.membersListCard}>
-                {selectedSyndicate.members.map((member, idx) => (
-                  <View
-                    key={member.id}
-                    style={[styles.memberRow, idx > 0 && styles.memberRowBorder]}
-                  >
-                    <View style={styles.memberInfo}>
-                      <View style={styles.memberAvatar}>
-                        <Text style={styles.memberInitial}>{member.initial}</Text>
-                      </View>
-                      <View>
-                        <Text style={styles.memberName}>{member.name}</Text>
-                        <Text style={styles.memberRole}>{member.role}</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.memberLevel}>Lv.{member.level}</Text>
+                {isLoadingDetails ? (
+                  <View style={{ padding: 40, alignItems: "center" }}>
+                    <ActivityIndicator color="#71B312" />
+                    <Text style={[styles.reqLabel, { marginTop: 10 }]}>
+                      Loading Roster...
+                    </Text>
                   </View>
-                ))}
+                ) : selectedSyndicate.members.length === 0 ? (
+                  <View style={{ padding: 40, alignItems: "center" }}>
+                    <Text style={styles.reqLabel}>No members found</Text>
+                  </View>
+                ) : (
+                  selectedSyndicate.members.map((member, idx) => (
+                    <View
+                      key={member.id}
+                      style={[
+                        styles.memberRow,
+                        idx > 0 && styles.memberRowBorder,
+                      ]}
+                    >
+                      <View style={styles.memberInfo}>
+                        <View style={styles.memberAvatar}>
+                          <Text style={styles.memberInitial}>
+                            {member.initial}
+                          </Text>
+                        </View>
+                        <View>
+                          <Text style={styles.memberName}>{member.name}</Text>
+                          <Text style={styles.memberRole}>{member.role}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.memberLevel}>Lv.{member.level}</Text>
+                    </View>
+                  ))
+                )}
               </View>
             </View>
           </ScrollView>
@@ -291,19 +477,19 @@ export default function SyndicateScreen() {
             <View style={styles.card}>
               <Text style={styles.cardSectionLabel}>Clan Logo</Text>
               <View style={styles.logoGrid}>
-                {CLAN_LOGOS.map((logo, index) => {
-                  const isSelected = selectedLogo === logo;
+                {CLAN_LOGO_KEYS.map((emblemId) => {
+                  const isSelected = selectedLogo === emblemId;
                   return (
                     <TouchableOpacity
-                      key={index}
-                      onPress={() => setSelectedLogo(logo)}
+                      key={emblemId}
+                      onPress={() => setSelectedLogo(emblemId)}
                       style={[
                         styles.logoOption,
                         isSelected && styles.logoOptionSelected,
                       ]}
                     >
                       <Image
-                        source={logo}
+                        source={EMBLEM_MAP[emblemId]}
                         style={{ width: 36, height: 36 }}
                         contentFit="contain"
                       />
@@ -314,7 +500,9 @@ export default function SyndicateScreen() {
             </View>
 
             <View style={styles.card}>
-              <Text style={styles.cardSectionLabel}>Clan Name (3–28 chars)</Text>
+              <Text style={styles.cardSectionLabel}>
+                Clan Name (3–28 chars)
+              </Text>
               <TextInput
                 style={styles.inputField}
                 value={name}
@@ -348,7 +536,10 @@ export default function SyndicateScreen() {
                   onPress={() => setIsPublic(true)}
                 >
                   <Text
-                    style={[styles.radioText, isPublic && styles.radioTextActive]}
+                    style={[
+                      styles.radioText,
+                      isPublic && styles.radioTextActive,
+                    ]}
                   >
                     Public
                   </Text>
@@ -400,27 +591,104 @@ export default function SyndicateScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.createSubmitBtn, !isNameValid && { opacity: 0.45 }]}
-              disabled={!isNameValid}
-              onPress={() => {
-                setJoinedMessage(`Created clan: ${name.trim()}`);
-                joinSyndicate({
-                  id: Math.random().toString(),
-                  name: name.trim(),
-                  rank: 99,
-                  logo: selectedLogo,
-                  role: "Grandmaster",
-                  wealth: 0,
-                  memberCount: 1,
-                  maxMembers: 25,
-                  season: "Season 4 · Start",
-                });
-                setIsCreating(false);
-                setName("");
-                setDescription("");
+              style={[
+                styles.createSubmitBtn,
+                (!isNameValid || isSubmitting) && { opacity: 0.45 },
+              ]}
+              disabled={!isNameValid || isSubmitting}
+              onPress={async () => {
+                setIsSubmitting(true);
+                const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+                try {
+                  await new Promise<void>((resolve, reject) => {
+                    const unsubscribe = websocketManager.onMessage((msg) => {
+                      if (msg.type === "CREATE_SYNDICATE_OK") {
+                        unsubscribe();
+
+                        // Parse response mapping
+                        const syndicateId =
+                          (msg.data as any)?.syndicateId ||
+                          Math.random().toString();
+                        const syndicateName =
+                          (msg.data as any)?.name || name.trim();
+
+                        setJoinedMessage(`Created clan: ${syndicateName}`);
+                        joinSyndicate({
+                          id: syndicateId,
+                          name: syndicateName,
+                          rank: 99,
+                          logo: EMBLEM_MAP[selectedLogo],
+                          role: "Grandmaster",
+                          wealth: 0,
+                          memberCount: 1,
+                          maxMembers: 25,
+                          season: "Season 4 · Start",
+                        });
+
+                        resolve();
+                      } else if (
+                        msg.type === "ERROR" &&
+                        (msg as any).payload?.requestId === requestId
+                      ) {
+                        // Or if the error encompasses this requestId inside the payload
+                        // Note: Error catching is optimistic based on type checks
+                        unsubscribe();
+                        reject(
+                          new Error(
+                            msg.message || msg.code || "Failed to create clan",
+                          ),
+                        );
+                      } else if (
+                        msg.type === "ERROR" &&
+                        !(msg as any).payload?.requestId
+                      ) {
+                        // Some general errors won't mirror the request ID, we check immediately if it was sent back rapidly after our payload
+                        unsubscribe();
+                        reject(
+                          new Error(
+                            msg.message || msg.code || "Failed to create clan",
+                          ),
+                        );
+                      }
+                    });
+
+                    websocketManager
+                      .send(
+                        "CREATE_SYNDICATE",
+                        {
+                          requestId,
+                          name: name.trim(),
+                          description: description.trim(),
+                          visibility: isPublic ? "public" : "private",
+                          levelPreferenceMin: parseInt(minLevel) || 1,
+                          goldPreferenceMin: parseInt(minGold) || 0,
+                          emblemId: selectedLogo,
+                        },
+                        false,
+                      )
+                      .catch((err) => {
+                        unsubscribe();
+                        reject(err);
+                      });
+                  });
+
+                  setIsCreating(false);
+                  setName("");
+                  setDescription("");
+                } catch (error) {
+                  Alert.alert(
+                    "Error Creating Clan",
+                    error instanceof Error ? error.message : "Network error",
+                  );
+                } finally {
+                  setIsSubmitting(false);
+                }
               }}
             >
-              <Text style={styles.createSubmitText}>Create Clan</Text>
+              <Text style={styles.createSubmitText}>
+                {isSubmitting ? "Creating..." : "Create Clan"}
+              </Text>
             </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
@@ -473,7 +741,11 @@ export default function SyndicateScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 6, paddingRight: 4, paddingBottom: 12 }}
+              contentContainerStyle={{
+                gap: 6,
+                paddingRight: 4,
+                paddingBottom: 12,
+              }}
             >
               <View style={[styles.pill, styles.pillActive]}>
                 <Text style={styles.pillTextActive}>Craft +12%</Text>
@@ -545,6 +817,14 @@ export default function SyndicateScreen() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={fetchSyndicates}
+              tintColor="#71B312"
+              colors={["#71B312"]}
+            />
+          }
         >
           <View style={styles.listContainer}>
             {filteredSyndicates.length === 0 ? (
@@ -582,7 +862,9 @@ export default function SyndicateScreen() {
                         {syn.memberCount}/{syn.maxMembers} members
                       </Text>
                       <View style={styles.clanReqRow}>
-                        <Text style={styles.clanReqText}>Lv.{syn.minLevel}+</Text>
+                        <Text style={styles.clanReqText}>
+                          Lv.{syn.minLevel}+
+                        </Text>
                         <Text style={styles.clanReqSep}>·</Text>
                         <Text style={styles.clanReqText}>
                           Asset {syn.minAsset}+
@@ -592,7 +874,7 @@ export default function SyndicateScreen() {
                     <TouchableOpacity
                       style={[styles.joinBtnSmall, !canJoin && styles.fullBtn]}
                       disabled={!canJoin}
-                      onPress={() => setJoinedMessage(`You joined ${syn.name}!`)}
+                      onPress={() => handleJoinRequest(syn)}
                     >
                       <Text
                         style={[

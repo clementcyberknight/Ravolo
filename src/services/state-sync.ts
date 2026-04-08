@@ -120,7 +120,7 @@ function extractInventory(data: AnyRecord): Record<string, number> | null {
   return mapped;
 }
 
-function extractPlots(data: AnyRecord) {
+function extractPlots(data: AnyRecord, serverNowMs?: number) {
   const farm = asRecord(data.farm) ?? data;
   const plotsSource = farm.plots;
   if (!Array.isArray(plotsSource)) return null;
@@ -149,25 +149,40 @@ function extractPlots(data: AnyRecord) {
         parseNumber(rec.readyAtMs) ??
         null;
 
+      const msUntilReady =
+        parseNumber(rec.msUntilReady) ??
+        parseNumber(rec.ms_until_ready) ??
+        null;
+
+      const effectiveNowMs = serverNowMs ?? Date.now();
+      const derivedStatus =
+        normalizedCropId && (msUntilReady !== null ? msUntilReady <= 0 : readyAt !== null)
+          ? (msUntilReady !== null
+              ? msUntilReady <= 0
+              : readyAt !== null && effectiveNowMs >= readyAt)
+            ? "ready"
+            : "planted"
+          : normalizedCropId && plantedAt
+            ? "planted"
+            : "empty";
+
       const rawStatus =
         typeof rec.status === "string"
           ? rec.status.toLowerCase()
-          : normalizedCropId && readyAt
-            ? Date.now() >= readyAt
-              ? "ready"
-              : "planted"
-            : normalizedCropId && plantedAt
-              ? "planted"
-              : "empty";
+          : derivedStatus;
       const status =
         rawStatus === "ready" ||
         rawStatus === "planted" ||
         rawStatus === "empty" ||
         rawStatus === "growing"
           ? rawStatus === "growing"
-            ? "planted"
-            : rawStatus
-          : "empty";
+            ? derivedStatus === "ready"
+              ? "ready"
+              : "planted"
+            : rawStatus === "planted" && derivedStatus === "ready"
+              ? "ready"
+              : rawStatus
+          : derivedStatus;
 
       const plotId =
         typeof rec.plotId === "number" || typeof rec.plotId === "string"
@@ -204,6 +219,13 @@ export function applyServerSync(rawData: unknown) {
 
   const messageType = typeof message.type === "string" ? message.type : undefined;
 
+  const serverNowMs =
+    typeof data.serverNowMs === "number"
+      ? data.serverNowMs
+      : typeof message.serverNowMs === "number"
+        ? message.serverNowMs
+        : undefined;
+
   const economy = extractEconomy(data);
   useGameStore.getState().setEconomyFromServer(economy);
 
@@ -212,7 +234,7 @@ export function applyServerSync(rawData: unknown) {
     useInventoryStore.getState().setInventoryFromServer(inventory);
   }
 
-  const farm = extractPlots(data);
+  const farm = extractPlots(data, serverNowMs);
   if (farm && farm.plots.length > 0) {
     useFarmStore.getState().setFarmFromServer(farm);
   }
@@ -288,13 +310,6 @@ export function applyServerSync(rawData: unknown) {
         : undefined,
     });
   }
-
-  const serverNowMs =
-    typeof data.serverNowMs === "number"
-      ? data.serverNowMs
-      : typeof message.serverNowMs === "number"
-        ? message.serverNowMs
-        : undefined;
 
   if (messageType === "PONG" && typeof serverNowMs === "number") {
     useServerTimeStore.getState().setServerNowMs(serverNowMs);

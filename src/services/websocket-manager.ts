@@ -72,6 +72,7 @@ class WebsocketManager {
   private reconnectAttempts = 0;
   private pending = new Map<string, PendingRequest>();
   private listeners = new Set<(msg: WsMessage) => void>();
+  private lastCloseWasUnauthorized = false;
 
   connect(accessToken: string) {
     debugLog("connect() called");
@@ -100,6 +101,8 @@ class WebsocketManager {
 
     ws.onclose = (event) => {
       this.stopPingLoop();
+      this.lastCloseWasUnauthorized =
+        event.code === 1006 && event.reason.includes("401 Unauthorized");
       debugLog("disconnected", {
         code: event.code,
         reason: event.reason,
@@ -240,13 +243,24 @@ class WebsocketManager {
     setTimeout(() => {
       if (!this.token) return;
 
-      // If access token is near expiry, refresh before reconnecting.
-      void useAuthStore
-        .getState()
-        .getValidAccessToken()
+      const authState = useAuthStore.getState();
+      const getNextToken = this.lastCloseWasUnauthorized
+        ? authState.refreshSession()
+        : authState.getValidAccessToken();
+
+      void getNextToken
         .then((nextToken) => {
-          if (!nextToken) return;
-          debugLog("retry connecting with refreshed/valid token");
+          if (!nextToken) {
+            debugLog("retry cancelled - no usable access token");
+            return;
+          }
+
+          debugLog(
+            this.lastCloseWasUnauthorized
+              ? "retry connecting with refreshed access token"
+              : "retry connecting with refreshed/valid token",
+          );
+          this.lastCloseWasUnauthorized = false;
           this.connect(nextToken);
         })
         .catch(() => undefined);
