@@ -1,7 +1,11 @@
+import { ASSET_MAP } from "@/components/inventory-modal";
 import { ScreenHeader } from "@/components/screen-header";
 import { SubTabs } from "@/components/sub-tabs";
 import { ThemedView } from "@/components/themed-view";
+import { useDebounce } from "@/hooks/use-debounce";
 import { websocketManager } from "@/services/websocket-manager";
+import { useGameStore } from "@/store/game-store";
+import { useInventoryStore } from "@/store/inventory-store";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import {
@@ -11,7 +15,7 @@ import {
   Search,
   Shield,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -23,14 +27,114 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
-import { useSyndicateStore } from "../../store/syndicate-store";
+  DashboardCommodity,
+  DashboardMember,
+  JoinRequest,
+  SyndicateDashboard,
+  useSyndicateStore,
+} from "../../store/syndicate-store";
 
 import { Syndicate } from "../../constants/syndicate-mock";
 import { BottomTabInset } from "../../constants/theme";
+
+const MICRO_PER_GOLD = 1000;
+
+function formatGold(micro: number): string {
+  const gold = micro / MICRO_PER_GOLD;
+  if (gold >= 1_000_000) return `${(gold / 1_000_000).toFixed(1)}M`;
+  if (gold >= 1_000) return `${(gold / 1_000).toFixed(1)}k`;
+  return gold.toLocaleString();
+}
+
+function formatItemName(id: string) {
+  return id
+    .replace(/^seed:/, "")
+    .replace(/^animal:/, "")
+    .replace(/^tool:/, "")
+    .replace(/^craft:/, "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function roleLabel(role: string): string {
+  if (role === "owner") return "Grandmaster";
+  if (role === "officer") return "Enforcer";
+  return "Member";
+}
+
+function parseVisibility(raw: unknown): "public" | "private" {
+  if (typeof raw === "string" && raw.toLowerCase() === "private") {
+    return "private";
+  }
+  return "public";
+}
+
+function visibilityStatusLabel(visibility: "public" | "private" | undefined) {
+  return visibility === "private" ? "Private" : "Public";
+}
+
+function joinActionState(
+  syndicateId: string,
+  memberCount: number,
+  maxMembers: number,
+  pendingJoinSyndicateId: string | null,
+  joinInFlight: boolean,
+) {
+  const isFull = memberCount >= maxMembers;
+  if (isFull) {
+    return { label: "Full" as const, disabled: true };
+  }
+  if (pendingJoinSyndicateId === syndicateId) {
+    return { label: "Requested" as const, disabled: true };
+  }
+  if (pendingJoinSyndicateId != null) {
+    return { label: "Join" as const, disabled: true };
+  }
+  if (joinInFlight) {
+    return { label: "Join" as const, disabled: true };
+  }
+  return { label: "Join" as const, disabled: false };
+}
+
+function generateRequestId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getMyUserId(): string | null {
+  try {
+    const authStore = require("@/store/auth-store").useAuthStore;
+    return authStore.getState().profile?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function sendSyndicateAction(
+  type: string,
+  payload: Record<string, unknown>,
+  okType: string,
+): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const unsubscribe = websocketManager.onMessage((msg) => {
+      if (msg.type === okType) {
+        unsubscribe();
+        resolve((msg.data ?? {}) as Record<string, unknown>);
+      } else if (msg.type === "ERROR") {
+        unsubscribe();
+        reject(new Error(msg.message || (msg as any).code || "Action failed"));
+      }
+    });
+
+    void websocketManager
+      .send(type, { requestId: generateRequestId(), ...payload }, false)
+      .catch((e) => {
+        unsubscribe();
+        reject(e);
+      });
+  });
+}
 
 const reindeerIcon = require("@/assets/image/assets_images_icons_sanctuary_reindeer.webp");
 const phoenixIcon = require("@/assets/image/assets_images_icons_sanctuary_phoenix.webp");
@@ -53,10 +157,6 @@ const CLAN_LOGO_KEYS = Object.keys(EMBLEM_MAP);
 const crownIcon = require("@/assets/image/assets_images_icons_misc_crown.webp");
 const coinsIcon = require("@/assets/image/assets_images_icons_misc_coins.webp");
 
-const carrotIcon = require("@/assets/image/assets_images_icons_crops_carrot.webp");
-const cornIcon = require("@/assets/image/assets_images_icons_crops_corn.webp");
-const berryIcon = require("@/assets/image/assets_images_icons_areaitems_berries.webp");
-
 type Tab = "dashboard" | "bank" | "war" | "idol" | "roster";
 
 const SYNDICATE_TABS = [
@@ -67,53 +167,14 @@ const SYNDICATE_TABS = [
   { id: "roster", label: "ROSTER" },
 ];
 
-interface CropShare {
-  name: string;
-  image: any;
-  share: number;
-  priceMove: number;
-  monopoly: boolean;
-  hint: "buy" | "sell" | "hold";
-  vaultQty: number;
-}
-
-const CROPS: CropShare[] = [
-  {
-    name: "Carrot",
-    image: carrotIcon,
-    share: 51,
-    priceMove: 4.2,
-    monopoly: true,
-    hint: "sell",
-    vaultQty: 340,
-  },
-  {
-    name: "Corn",
-    image: cornIcon,
-    share: 28,
-    priceMove: -1.8,
-    monopoly: false,
-    hint: "buy",
-    vaultQty: 120,
-  },
-  {
-    name: "Berry",
-    image: berryIcon,
-    share: 15,
-    priceMove: 0.5,
-    monopoly: false,
-    hint: "hold",
-    vaultQty: 85,
-  },
-];
-
 export default function SyndicateScreen() {
-  const insets = useSafeAreaInsets();
   const {
     joinedSyndicate,
     joinSyndicate,
     syndicates,
     setSyndicates,
+    pendingJoinSyndicateId,
+    setPendingJoinSyndicateId,
     _hasHydrated,
   } = useSyndicateStore();
   const router = useRouter();
@@ -123,6 +184,7 @@ export default function SyndicateScreen() {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [joinedMessage, setJoinedMessage] = useState<string | null>(null);
+  const [joinInFlight, setJoinInFlight] = useState(false);
 
   const [isCreating, setIsCreating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -185,6 +247,7 @@ export default function SyndicateScreen() {
           memberCount: s.members || 0,
           maxMembers: 50, // Default for now
           status: s.members >= 50 ? "Full" : "Open",
+          visibility: parseVisibility(s.visibility),
           members: [], // Not provided in list view
         }));
         setSyndicates(mappedList);
@@ -220,8 +283,10 @@ export default function SyndicateScreen() {
 
         setSelectedSyndicate((prev) => {
           if (!prev || prev.id !== (data as any).id) return prev;
+          const d = data as Record<string, unknown>;
           return {
             ...prev,
+            visibility: parseVisibility(d.visibility),
             members: membersList.map((m: any) => ({
               id: m.userId,
               name: m.name || `User ${m.userId.slice(0, 4)}`,
@@ -244,21 +309,40 @@ export default function SyndicateScreen() {
   }, []);
 
   const handleJoinRequest = async (syndicate: Syndicate) => {
+    if (joinInFlight) return;
+    if (pendingJoinSyndicateId === syndicate.id) return;
+    if (
+      pendingJoinSyndicateId != null &&
+      pendingJoinSyndicateId !== syndicate.id
+    ) {
+      Alert.alert(
+        "Request pending",
+        "You already have a pending join request. Wait for a response before requesting another clan.",
+      );
+      return;
+    }
+
     const requestId = `join-${Date.now()}`;
+    setJoinInFlight(true);
 
     try {
       await new Promise<void>((resolve, reject) => {
         const unsubscribe = websocketManager.onMessage((msg) => {
           if (msg.type === "REQUEST_JOIN_OK") {
             unsubscribe();
-            const status = (msg.data as any)?.status;
-            if (status === "accepted") {
+            const data = (msg.data || {}) as {
+              ok?: boolean;
+              status?: string;
+            };
+
+            if (data.status === "accepted") {
+              setPendingJoinSyndicateId(null);
               setJoinedMessage(`Successfully joined ${syndicate.name}!`);
               joinSyndicate({
                 id: syndicate.id,
                 name: syndicate.name,
                 rank: syndicate.rank,
-                logo: peacockIcon, // Default logo
+                logo: peacockIcon,
                 role: "Initiate",
                 wealth: 0,
                 memberCount: syndicate.memberCount + 1,
@@ -266,25 +350,44 @@ export default function SyndicateScreen() {
                 season: "Season 4 · Start",
               });
               setSelectedSyndicate(null);
-            } else {
-              setJoinedMessage(`Application sent to ${syndicate.name}.`);
+              resolve();
+              return;
             }
+
+            if (data.ok === false) {
+              reject(
+                new Error(
+                  (msg as { message?: string }).message ||
+                    "Join request was rejected",
+                ),
+              );
+              return;
+            }
+
+            setPendingJoinSyndicateId(syndicate.id);
+            setJoinedMessage(`Application sent to ${syndicate.name}.`);
             resolve();
-          } else if (
-            msg.type === "ERROR" &&
-            (msg as any).payload?.requestId === requestId
-          ) {
+          } else if (msg.type === "ERROR") {
             unsubscribe();
-            reject(new Error(msg.message || "Failed to join syndicate"));
+            const code = (msg as { code?: string }).code;
+            if (code === "ALREADY_IN_SYNDICATE") {
+              reject(new Error("You are already in a syndicate."));
+            } else if (code === "ALREADY_REQUESTED") {
+              setPendingJoinSyndicateId(syndicate.id);
+              reject(
+                new Error(
+                  "You already have a pending request for this syndicate.",
+                ),
+              );
+            } else {
+              reject(new Error(msg.message || "Failed to join syndicate"));
+            }
           }
         });
 
         void websocketManager.send(
           "REQUEST_JOIN",
-          {
-            requestId,
-            syndicateId: syndicate.id,
-          },
+          { requestId, syndicateId: syndicate.id },
           false,
         );
       });
@@ -293,6 +396,41 @@ export default function SyndicateScreen() {
         "Error Joining",
         err instanceof Error ? err.message : "Request failed",
       );
+    } finally {
+      setJoinInFlight(false);
+    }
+  };
+
+  const handleCancelJoinRequest = async () => {
+    if (!pendingJoinSyndicateId) return;
+    const syndicateId = pendingJoinSyndicateId;
+    const requestId = `cancel-join-${Date.now()}`;
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const unsubscribe = websocketManager.onMessage((msg) => {
+          if (msg.type === "CANCEL_JOIN_REQUEST_OK") {
+            unsubscribe();
+            setPendingJoinSyndicateId(null);
+            setJoinedMessage(null);
+            resolve();
+          } else if (msg.type === "ERROR") {
+            unsubscribe();
+            reject(new Error(msg.message || "Failed to cancel request"));
+          }
+        });
+
+        void websocketManager.send(
+          "CANCEL_JOIN_REQUEST",
+          { requestId, syndicateId },
+          false,
+        );
+      });
+    } catch (err) {
+      Alert.alert(
+        "Cancel Failed",
+        err instanceof Error ? err.message : "Could not cancel request",
+      );
     }
   };
 
@@ -300,19 +438,17 @@ export default function SyndicateScreen() {
     s.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  const playerStats = { level: 12, totalAsset: 50 };
-
   if (!_hasHydrated) return null;
 
   // ── SYNDICATE DETAIL VIEW ─────────────────────────────────────────────────
   if (selectedSyndicate) {
-    const isFull =
-      selectedSyndicate.memberCount >= selectedSyndicate.maxMembers;
-    const meetsReqs =
-      playerStats.level >= selectedSyndicate.minLevel &&
-      playerStats.totalAsset >= selectedSyndicate.minAsset;
-    const canJoin =
-      !isFull && selectedSyndicate.status !== "Closed" && meetsReqs;
+    const detailJoin = joinActionState(
+      selectedSyndicate.id,
+      selectedSyndicate.memberCount,
+      selectedSyndicate.maxMembers,
+      pendingJoinSyndicateId,
+      joinInFlight,
+    );
 
     return (
       <ThemedView style={styles.container}>
@@ -347,19 +483,29 @@ export default function SyndicateScreen() {
                       Rank #{selectedSyndicate.rank}
                     </Text>
                   </View>
-                  {!joinedMessage?.includes(selectedSyndicate.name) && (
+                  {pendingJoinSyndicateId === selectedSyndicate.id ? (
                     <TouchableOpacity
-                      style={[styles.joinBtnSmall, !canJoin && styles.fullBtn]}
-                      disabled={!canJoin}
+                      style={[styles.joinBtnSmall, styles.cancelBtn]}
+                      onPress={handleCancelJoinRequest}
+                    >
+                      <Text style={styles.cancelBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.joinBtnSmall,
+                        detailJoin.disabled && styles.fullBtn,
+                      ]}
+                      disabled={detailJoin.disabled}
                       onPress={() => handleJoinRequest(selectedSyndicate)}
                     >
                       <Text
                         style={[
                           styles.joinBtnText,
-                          !canJoin && styles.fullBtnText,
+                          detailJoin.disabled && styles.fullBtnText,
                         ]}
                       >
-                        {isFull ? "Full" : canJoin ? "Join" : "Locked"}
+                        {detailJoin.label}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -405,7 +551,9 @@ export default function SyndicateScreen() {
               </View>
               <View style={[styles.card, styles.statCardCentered]}>
                 <Text style={styles.reqLabel}>Status</Text>
-                <Text style={styles.statValue}>{selectedSyndicate.status}</Text>
+                <Text style={styles.statValue}>
+                  {visibilityStatusLabel(selectedSyndicate.visibility)}
+                </Text>
               </View>
             </View>
 
@@ -811,6 +959,14 @@ export default function SyndicateScreen() {
         {joinedMessage && (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>{joinedMessage}</Text>
+            {pendingJoinSyndicateId && (
+              <TouchableOpacity
+                style={styles.cancelRequestBtn}
+                onPress={handleCancelJoinRequest}
+              >
+                <Text style={styles.cancelRequestText}>Cancel Request</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -831,11 +987,13 @@ export default function SyndicateScreen() {
               <Text style={styles.noClansText}>No clans found</Text>
             ) : (
               filteredSyndicates.map((syn: Syndicate, idx: number) => {
-                const isFull = syn.memberCount >= syn.maxMembers;
-                const meetsReqs =
-                  playerStats.level >= syn.minLevel &&
-                  playerStats.totalAsset >= syn.minAsset;
-                const canJoin = !isFull && syn.status !== "Closed" && meetsReqs;
+                const listJoin = joinActionState(
+                  syn.id,
+                  syn.memberCount,
+                  syn.maxMembers,
+                  pendingJoinSyndicateId,
+                  joinInFlight,
+                );
 
                 return (
                   <TouchableOpacity
@@ -872,17 +1030,23 @@ export default function SyndicateScreen() {
                       </View>
                     </View>
                     <TouchableOpacity
-                      style={[styles.joinBtnSmall, !canJoin && styles.fullBtn]}
-                      disabled={!canJoin}
-                      onPress={() => handleJoinRequest(syn)}
+                      style={[
+                        styles.joinBtnSmall,
+                        listJoin.disabled && styles.fullBtn,
+                      ]}
+                      disabled={listJoin.disabled}
+                      onPress={(e) => {
+                        e.stopPropagation?.();
+                        handleJoinRequest(syn);
+                      }}
                     >
                       <Text
                         style={[
                           styles.joinBtnText,
-                          !canJoin && styles.fullBtnText,
+                          listJoin.disabled && styles.fullBtnText,
                         ]}
                       >
-                        {isFull ? "Full" : canJoin ? "Join" : "Locked"}
+                        {listJoin.label}
                       </Text>
                     </TouchableOpacity>
                   </TouchableOpacity>
@@ -898,35 +1062,336 @@ export default function SyndicateScreen() {
 
 // ─── Sub-Components ──────────────────────────────────────────────────────────
 
+function useSyndicateDashboard() {
+  const joinedSyndicate = useSyndicateStore((s) => s.joinedSyndicate);
+  const dashboard = useSyndicateStore((s) => s.dashboard);
+  const dashboardLoading = useSyndicateStore((s) => s.dashboardLoading);
+  const setDashboard = useSyndicateStore((s) => s.setDashboard);
+  const setDashboardLoading = useSyndicateStore((s) => s.setDashboardLoading);
+
+  const fetchDashboard = useCallback(() => {
+    if (!joinedSyndicate) return;
+    setDashboardLoading(true);
+
+    void websocketManager.send(
+      "SYNDICATE_DASHBOARD",
+      { syndicateId: joinedSyndicate.id },
+      false,
+    );
+  }, [joinedSyndicate, setDashboardLoading]);
+
+  useEffect(() => {
+    const unsubscribe = websocketManager.onMessage((msg) => {
+      if (msg.type === "SYNDICATE_DASHBOARD_OK" && msg.data) {
+        const raw = msg.data as Record<string, unknown>;
+        const d: SyndicateDashboard = {
+          ...(raw as unknown as SyndicateDashboard),
+          joinRequests: Array.isArray(raw.joinRequests)
+            ? (raw.joinRequests as JoinRequest[])
+            : [],
+        };
+        setDashboard(d);
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [setDashboard]);
+
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
+
+  return { dashboard, dashboardLoading, refetch: fetchDashboard };
+}
+
+function CommodityRow({
+  commodity,
+  isLast,
+}: {
+  commodity: DashboardCommodity;
+  isLast: boolean;
+}) {
+  const icon = ASSET_MAP[commodity.itemId];
+  const pricePerUnit = commodity.sellPriceMicro / MICRO_PER_GOLD;
+
+  return (
+    <View style={[styles.commodityRow, !isLast && styles.commodityRowBorder]}>
+      <View style={styles.cropIconWrap}>
+        <Image
+          source={icon ?? ASSET_MAP["wheat"]}
+          style={{ width: 26, height: 26 }}
+          contentFit="contain"
+        />
+      </View>
+      <View style={styles.cropInfo}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Text style={styles.commodityName}>
+            {formatItemName(commodity.itemId)}
+          </Text>
+          {commodity.monopolyPct >= 10 && (
+            <View style={styles.monopolyTag}>
+              <Text style={styles.monopolyText}>MONOPOLY</Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.commodityStats}>
+          x{commodity.quantity} · {commodity.monopolyPct.toFixed(1)}% share
+        </Text>
+      </View>
+      <View style={styles.cropRight}>
+        <Text style={styles.priceMove}>{pricePerUnit.toFixed(1)}g/u</Text>
+        {commodity.crashPct > 5 ? (
+          <View style={[styles.hintPill, styles.sellHint]}>
+            <Text style={styles.hintText}>HIGH CRASH</Text>
+          </View>
+        ) : (
+          <View style={[styles.hintPill, styles.buyHint]}>
+            <Text style={styles.hintText}>
+              {formatGold(commodity.sellPriceMicro * commodity.quantity)}g
+            </Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const MemoizedCommodityRow = React.memo(CommodityRow);
+
+function MemberRow({
+  member,
+  isLast,
+}: {
+  member: DashboardMember;
+  isLast: boolean;
+}) {
+  const shortId = member.userId.slice(0, 6);
+  return (
+    <View style={[styles.miniMemberRow, !isLast && styles.miniMemberBorder]}>
+      <View
+        style={[
+          styles.statusDot,
+          { backgroundColor: member.online ? "#71B312" : "#FFB038" },
+        ]}
+      />
+      <Text style={styles.miniMemberName}>{shortId}</Text>
+      <Text style={styles.miniMemberRole}>{roleLabel(member.role)}</Text>
+    </View>
+  );
+}
+
+const MemoizedMemberRow = React.memo(MemberRow);
+
+function useMyBackendRole(): "owner" | "officer" | "member" | null {
+  const joinedSyndicate = useSyndicateStore((s) => s.joinedSyndicate);
+  const dashboard = useSyndicateStore((s) => s.dashboard);
+
+  return useMemo(() => {
+    if (!joinedSyndicate || !dashboard?.members) return null;
+    const myId = getMyUserId();
+    if (!myId) return null;
+    const me = dashboard.members.find((m) => m.userId === myId);
+    return me?.role ?? null;
+  }, [joinedSyndicate, dashboard?.members]);
+}
+
+function JoinRequestRow({
+  req,
+  syndicateId,
+  onActionComplete,
+  isLast,
+}: {
+  req: JoinRequest;
+  syndicateId: string;
+  onActionComplete: () => void;
+  isLast: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const shortId = req.userId.slice(0, 6);
+
+  const handleAcceptOrReject = async (
+    action: "ACCEPT_REQUEST" | "REJECT_REQUEST",
+  ) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const okType =
+        action === "ACCEPT_REQUEST" ? "ACCEPT_REQUEST_OK" : "REJECT_REQUEST_OK";
+      await sendSyndicateAction(action, { syndicateId, userId: req.userId }, okType);
+      onActionComplete();
+    } catch (err) {
+      Alert.alert(
+        "Action Failed",
+        err instanceof Error ? err.message : "Something went wrong",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View
+      style={[styles.fullMemberRow, !isLast && styles.fullMemberBorder]}
+    >
+      <View style={styles.memberAvatarSmall}>
+        <Text style={styles.avatarInitial}>
+          {shortId[0]?.toUpperCase() ?? "?"}
+        </Text>
+      </View>
+      <View style={{ flex: 1, marginLeft: 12 }}>
+        <Text style={styles.fullMemberName}>{shortId}</Text>
+        <Text style={styles.fullMemberRole}>Lv. {req.level}</Text>
+      </View>
+      <View style={{ flexDirection: "row", gap: 6 }}>
+        <TouchableOpacity
+          style={styles.adminAcceptBtn}
+          onPress={() => handleAcceptOrReject("ACCEPT_REQUEST")}
+          disabled={busy}
+        >
+          <Text style={styles.adminAcceptText}>Accept</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.adminRejectBtn}
+          onPress={() => handleAcceptOrReject("REJECT_REQUEST")}
+          disabled={busy}
+        >
+          <Text style={styles.adminRejectText}>Reject</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 function DashboardContent() {
   const { joinedSyndicate } = useSyndicateStore();
+  const { dashboard, dashboardLoading, refetch } = useSyndicateDashboard();
+  const myRole = useMyBackendRole();
+  const isAdmin = myRole === "owner" || myRole === "officer";
+
   if (!joinedSyndicate) return null;
+
+  if (dashboardLoading && !dashboard) {
+    return (
+      <View style={{ padding: 40, alignItems: "center" }}>
+        <ActivityIndicator color="#71B312" />
+        <Text style={[styles.reqLabel, { marginTop: 10 }]}>Loading...</Text>
+      </View>
+    );
+  }
+
+  const totalGold = dashboard?.totalGold ?? joinedSyndicate.wealth;
+  const totalMembers = dashboard?.totalMembers ?? joinedSyndicate.memberCount;
+  const onlineCount = dashboard?.onlineCount ?? 0;
+  const commodities = dashboard?.commodities ?? [];
+  const members = dashboard?.members ?? [];
+  const joinRequests = dashboard?.joinRequests ?? [];
 
   return (
     <View style={styles.tabContainer}>
       {/* Wealth + Members */}
       <View style={styles.statsRow}>
         <View style={[styles.card, styles.statCard]}>
-          <Text style={styles.reqLabel}>Wealth</Text>
-          <Text style={styles.statValue}>
-            ${joinedSyndicate.wealth.toLocaleString()}
-          </Text>
-          <Text style={styles.statSub}>Season total</Text>
+          <Text style={styles.reqLabel}>Bank Gold</Text>
+          <Text style={styles.statValue}>{totalGold.toLocaleString()}</Text>
+          <Text style={styles.statSub}>Syndicate vault</Text>
         </View>
         <View style={[styles.card, styles.statCard]}>
           <Text style={styles.reqLabel}>Members</Text>
           <Text style={styles.statValue}>
-            {joinedSyndicate.memberCount}
+            {totalMembers}
             <Text style={styles.statValueMuted}>
               /{joinedSyndicate.maxMembers}
             </Text>
           </Text>
-          <Text style={styles.statSub}>
-            {joinedSyndicate.maxMembers - joinedSyndicate.memberCount} slots
-            open
-          </Text>
+          <Text style={styles.statSub}>{onlineCount} online</Text>
         </View>
       </View>
+
+      {/* Join Requests (Owner / Officer only) */}
+      {isAdmin && joinRequests.length > 0 && (
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardTitle}>
+              Join Requests ({joinRequests.length})
+            </Text>
+          </View>
+          {joinRequests.map((req, i) => (
+            <JoinRequestRow
+              key={req.userId}
+              req={req}
+              syndicateId={joinedSyndicate.id}
+              onActionComplete={refetch}
+              isLast={i === joinRequests.length - 1}
+            />
+          ))}
+        </View>
+      )}
+
+      {/* Boosts */}
+      {dashboard?.activeBoost && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Idol Status</Text>
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+            <View
+              style={[
+                styles.pill,
+                dashboard.activeBoost.idolStatus === "blessed" &&
+                  styles.pillActive,
+              ]}
+            >
+              <Text
+                style={
+                  dashboard.activeBoost.idolStatus === "blessed"
+                    ? styles.pillTextActive
+                    : styles.pillText
+                }
+              >
+                Idol Lv.{dashboard.activeBoost.idolLevel}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.pill,
+                dashboard.activeBoost.idolStatus === "blessed"
+                  ? styles.pillActive
+                  : dashboard.activeBoost.idolStatus === "punished"
+                    ? {
+                        backgroundColor: "rgba(255,56,60,0.1)",
+                        borderColor: "rgba(255,56,60,0.3)",
+                      }
+                    : undefined,
+              ]}
+            >
+              <Text
+                style={
+                  dashboard.activeBoost.idolStatus === "blessed"
+                    ? styles.pillTextActive
+                    : dashboard.activeBoost.idolStatus === "punished"
+                      ? {
+                          fontSize: 11,
+                          fontFamily: "Space Mono",
+                          color: "#FF383C",
+                          fontWeight: "700",
+                        }
+                      : styles.pillText
+                }
+              >
+                {dashboard.activeBoost.idolStatus === "blessed"
+                  ? "Blessed"
+                  : dashboard.activeBoost.idolStatus === "punished"
+                    ? "Punished"
+                    : "Neutral"}
+              </Text>
+            </View>
+            {dashboard.activeBoost.shieldExpiresAtMs > Date.now() && (
+              <View style={[styles.pill, styles.pillActive]}>
+                <Text style={styles.pillTextActive}>Shield Active</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Commodity Board */}
       <View style={styles.card}>
@@ -935,144 +1400,403 @@ function DashboardContent() {
           <ChevronDown size={15} color="rgba(3,32,24,0.4)" />
         </View>
 
-        {CROPS.map((crop, i) => (
-          <View
-            key={crop.name}
-            style={[
-              styles.commodityRow,
-              i < CROPS.length - 1 && styles.commodityRowBorder,
-            ]}
-          >
-            <View style={styles.cropIconWrap}>
-              <Image
-                source={crop.image}
-                style={{ width: 26, height: 26 }}
-                contentFit="contain"
-              />
-            </View>
-            <View style={styles.cropInfo}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <Text style={styles.commodityName}>{crop.name}</Text>
-                {crop.monopoly && (
-                  <View style={styles.monopolyTag}>
-                    <Text style={styles.monopolyText}>MONOPOLY</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.commodityStats}>
-                {crop.share}% Syndicate Share
-              </Text>
-            </View>
-            <View style={styles.cropRight}>
-              <Text
-                style={[
-                  styles.priceMove,
-                  { color: crop.priceMove > 0 ? "#71B312" : "#FF383C" },
-                ]}
-              >
-                {crop.priceMove > 0 ? "+" : ""}
-                {crop.priceMove}%
-              </Text>
-              <View
-                style={[
-                  styles.hintPill,
-                  crop.hint === "sell"
-                    ? styles.sellHint
-                    : crop.hint === "buy"
-                      ? styles.buyHint
-                      : styles.holdHint,
-                ]}
-              >
-                <Text style={styles.hintText}>{crop.hint.toUpperCase()}</Text>
-              </View>
-            </View>
+        {commodities.length === 0 ? (
+          <View style={styles.noDataBox}>
+            <Text style={styles.noDataText}>No commodities in bank</Text>
           </View>
-        ))}
+        ) : (
+          commodities.map((c, i) => (
+            <MemoizedCommodityRow
+              key={c.itemId}
+              commodity={c}
+              isLast={i === commodities.length - 1}
+            />
+          ))
+        )}
       </View>
 
       {/* Active Roster */}
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
-          <Text style={styles.cardTitle}>Active Roster</Text>
-          <Text style={styles.cardAction}>View all</Text>
+          <Text style={styles.cardTitle}>
+            Active Roster ({onlineCount}/{totalMembers})
+          </Text>
         </View>
 
-        {[
-          { name: "Satoshi_Grind", role: "Grandmaster", online: true },
-          { name: "CropCommander", role: "Enforcer", online: true },
-          { name: "YieldHunter", role: "Enforcer", online: false },
-        ].map((m, i, arr) => (
-          <View
-            key={m.name}
-            style={[
-              styles.miniMemberRow,
-              i < arr.length - 1 && styles.miniMemberBorder,
-            ]}
-          >
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: m.online ? "#71B312" : "#FFB038" },
-              ]}
-            />
-            <Text style={styles.miniMemberName}>{m.name}</Text>
-            <Text style={styles.miniMemberRole}>{m.role}</Text>
+        {members.length === 0 ? (
+          <View style={styles.noDataBox}>
+            <Text style={styles.noDataText}>No members loaded</Text>
           </View>
-        ))}
+        ) : (
+          members
+            .slice()
+            .sort((a, b) => Number(b.online) - Number(a.online))
+            .map((m, i, arr) => (
+              <MemoizedMemberRow
+                key={m.userId}
+                member={m}
+                isLast={i === arr.length - 1}
+              />
+            ))
+        )}
       </View>
     </View>
   );
 }
 
 function BankContent() {
+  const { joinedSyndicate, dashboard } = useSyndicateStore();
+  const playerGold = useGameStore((s) => s.coins);
+  const inventoryItems = useInventoryStore((s) => s.items);
+
+  const [depositAmount, setDepositAmount] = useState("");
+  const [depositingGold, setDepositingGold] = useState(false);
+  const [sellingItem, setSellingItem] = useState<string | null>(null);
+  const [sellQty, setSellQty] = useState("");
+
+  const isOwnerOrOfficer = useMemo(() => {
+    if (!dashboard?.members || !joinedSyndicate) return false;
+    const authStore = require("@/store/auth-store").useAuthStore;
+    const profile = authStore.getState().profile;
+    if (!profile) return false;
+    const me = dashboard.members.find((m) => m.userId === profile.id);
+    return me?.role === "owner" || me?.role === "officer";
+  }, [dashboard?.members, joinedSyndicate]);
+
+  const totalGold = dashboard?.totalGold ?? 0;
+  const commodities = dashboard?.commodities ?? [];
+
+  const depositableItems = useMemo(() => {
+    return Object.values(inventoryItems).filter(
+      (item) => item.type === "crop" && item.quantity > 0,
+    );
+  }, [inventoryItems]);
+
+  const handleDepositGold = useDebounce(() => {
+    const amount = parseInt(depositAmount, 10);
+    if (!amount || amount <= 0 || !joinedSyndicate) return;
+    if (amount > playerGold) {
+      Alert.alert("Insufficient Gold", "You don't have enough gold.");
+      return;
+    }
+
+    setDepositingGold(true);
+    const requestId = `dep-g-${Date.now().toString(36)}`;
+
+    const unsubscribe = websocketManager.onMessage((msg) => {
+      if (msg.type === "DEPOSIT_BANK_OK") {
+        unsubscribe();
+        setDepositingGold(false);
+        setDepositAmount("");
+        Alert.alert("Deposited", `${amount} gold deposited to syndicate bank.`);
+      } else if (msg.type === "ERROR") {
+        const payload = msg.payload as Record<string, unknown> | undefined;
+        if (
+          payload?.requestId === requestId ||
+          msg.code === "INSUFFICIENT_GOLD"
+        ) {
+          unsubscribe();
+          setDepositingGold(false);
+          Alert.alert(
+            "Deposit Failed",
+            msg.message || "Could not deposit gold.",
+          );
+        }
+      }
+    });
+
+    void websocketManager.send(
+      "DEPOSIT_BANK",
+      {
+        requestId,
+        syndicateId: joinedSyndicate.id,
+        kind: "gold",
+        amount,
+      },
+      false,
+    );
+  }, 500);
+
+  const handleDepositItem = useDebounce((itemId: string, qty: number) => {
+    if (qty <= 0 || !joinedSyndicate) return;
+
+    const requestId = `dep-i-${Date.now().toString(36)}`;
+    const unsubscribe = websocketManager.onMessage((msg) => {
+      if (msg.type === "DEPOSIT_BANK_OK") {
+        unsubscribe();
+        Alert.alert(
+          "Deposited",
+          `${qty}x ${formatItemName(itemId)} deposited.`,
+        );
+      } else if (msg.type === "ERROR") {
+        const payload = msg.payload as Record<string, unknown> | undefined;
+        if (
+          payload?.requestId === requestId ||
+          msg.code === "INSUFFICIENT_INV"
+        ) {
+          unsubscribe();
+          Alert.alert(
+            "Deposit Failed",
+            msg.message || "Could not deposit items.",
+          );
+        }
+      }
+    });
+
+    void websocketManager.send(
+      "DEPOSIT_BANK",
+      {
+        requestId,
+        syndicateId: joinedSyndicate.id,
+        kind: "item",
+        itemId,
+        amount: qty,
+      },
+      false,
+    );
+  }, 500);
+
+  const handleSellFromBank = useDebounce((itemId: string, quantity: number) => {
+    if (quantity <= 0 || !joinedSyndicate) return;
+
+    setSellingItem(itemId);
+    const requestId = `sell-${Date.now().toString(36)}`;
+
+    const unsubscribe = websocketManager.onMessage((msg) => {
+      if (msg.type === "SYNDICATE_BANK_SELL_OK") {
+        unsubscribe();
+        setSellingItem(null);
+        setSellQty("");
+        const data = msg.data as
+          | {
+              item: string;
+              quantity: number;
+              goldPaid: number;
+            }
+          | undefined;
+        Alert.alert(
+          "Sold",
+          `Sold ${data?.quantity ?? quantity}x ${formatItemName(itemId)} for ${data?.goldPaid ?? "?"} gold.`,
+        );
+      } else if (msg.type === "ERROR") {
+        const payload = msg.payload as Record<string, unknown> | undefined;
+        if (
+          payload?.requestId === requestId ||
+          msg.code === "NOT_AUTHORIZED" ||
+          msg.code === "INSUFFICIENT_INV" ||
+          msg.code === "TREASURY_DEPLETED"
+        ) {
+          unsubscribe();
+          setSellingItem(null);
+          Alert.alert("Sell Failed", msg.message || "Could not sell items.");
+        }
+      }
+    });
+
+    void websocketManager.send(
+      "SYNDICATE_BANK_SELL",
+      {
+        requestId,
+        syndicateId: joinedSyndicate.id,
+        itemId,
+        quantity,
+      },
+      false,
+    );
+  }, 500);
+
   return (
     <View style={styles.tabContainer}>
+      {/* Gold Vault */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Syndicate Vault</Text>
-        <View style={styles.vaultMeterContainer}>
-          <View style={styles.vaultMeterBg}>
-            <View style={[styles.vaultMeterFill, { width: "68%" }]} />
-          </View>
-          <View style={styles.vaultLabels}>
-            <Text style={styles.vaultLabelText}>6.8k / 10k Tokens</Text>
-            <Text style={styles.vaultLabelText}>LVL 4</Text>
+        <Text style={styles.cardTitle}>Gold Vault</Text>
+        <Text style={[styles.statValue, { marginTop: 8 }]}>
+          {totalGold.toLocaleString()}
+          <Text style={styles.statValueMuted}> gold</Text>
+        </Text>
+
+        <View style={{ marginTop: 16 }}>
+          <Text style={styles.reqLabel}>Deposit Gold</Text>
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+            <TextInput
+              style={[styles.inputField, { flex: 1, marginTop: 0 }]}
+              value={depositAmount}
+              onChangeText={setDepositAmount}
+              keyboardType="numeric"
+              placeholder={`You have ${playerGold.toLocaleString()}`}
+              placeholderTextColor="rgba(3,32,24,0.35)"
+            />
+            <TouchableOpacity
+              style={[
+                styles.depositBtn,
+                {
+                  width: 60,
+                  height: 44,
+                  borderRadius: 13,
+                  backgroundColor: "#032018",
+                },
+                depositingGold && { opacity: 0.5 },
+              ]}
+              disabled={
+                depositingGold ||
+                !depositAmount ||
+                parseInt(depositAmount, 10) <= 0
+              }
+              onPress={handleDepositGold}
+            >
+              <Text
+                style={{
+                  color: "white",
+                  fontFamily: "Space Mono",
+                  fontSize: 12,
+                  fontWeight: "700",
+                }}
+              >
+                {depositingGold ? "..." : "Send"}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
 
+      {/* Commodities in Bank */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Deposit Assets</Text>
-        <View style={{ gap: 2, marginTop: 12 }}>
-          {CROPS.map((crop, i) => (
-            <View
-              key={crop.name}
-              style={[
-                styles.depositRow,
-                i < CROPS.length - 1 && {
-                  borderBottomWidth: 1,
-                  borderBottomColor: "rgba(3,32,24,0.06)",
-                },
-              ]}
-            >
+        <Text style={styles.cardTitle}>Bank Commodities</Text>
+        {commodities.length === 0 ? (
+          <View style={[styles.noDataBox, { marginTop: 12 }]}>
+            <Text style={styles.noDataText}>No commodities stored</Text>
+          </View>
+        ) : (
+          <View style={{ gap: 2, marginTop: 12 }}>
+            {commodities.map((c, i) => (
               <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+                key={c.itemId}
+                style={[
+                  styles.depositRow,
+                  i < commodities.length - 1 && {
+                    borderBottomWidth: 1,
+                    borderBottomColor: "rgba(3,32,24,0.06)",
+                  },
+                ]}
               >
-                <Image
-                  source={crop.image}
-                  style={{ width: 24, height: 24 }}
-                  contentFit="contain"
-                />
-                <Text style={styles.depositName}>{crop.name}</Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <Image
+                    source={ASSET_MAP[c.itemId] ?? ASSET_MAP["wheat"]}
+                    style={{ width: 24, height: 24 }}
+                    contentFit="contain"
+                  />
+                  <View>
+                    <Text style={styles.depositName}>
+                      {formatItemName(c.itemId)}
+                    </Text>
+                    <Text style={styles.depositQty}>
+                      x{c.quantity} in vault
+                    </Text>
+                  </View>
+                </View>
+                {isOwnerOrOfficer && (
+                  <TouchableOpacity
+                    style={[
+                      styles.depositBtn,
+                      {
+                        width: 48,
+                        borderRadius: 10,
+                        backgroundColor:
+                          sellingItem === c.itemId
+                            ? "rgba(255,56,60,0.2)"
+                            : "#FF383C",
+                      },
+                    ]}
+                    disabled={sellingItem === c.itemId}
+                    onPress={() => {
+                      Alert.prompt
+                        ? Alert.prompt(
+                            `Sell ${formatItemName(c.itemId)}`,
+                            `Max: ${c.quantity}. Gold earned: ~${(c.sellPriceMicro / MICRO_PER_GOLD).toFixed(1)}/unit`,
+                            (text) => {
+                              const qty = parseInt(text, 10);
+                              if (qty > 0 && qty <= c.quantity) {
+                                handleSellFromBank(c.itemId, qty);
+                              }
+                            },
+                            "plain-text",
+                            String(c.quantity),
+                            "numeric",
+                          )
+                        : handleSellFromBank(c.itemId, c.quantity);
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "white",
+                        fontFamily: "Space Mono",
+                        fontSize: 9,
+                        fontWeight: "700",
+                      }}
+                    >
+                      SELL
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
-              <Text style={styles.depositQty}>{crop.vaultQty} in vault</Text>
-              <TouchableOpacity style={styles.depositBtn}>
-                <Text style={styles.depositBtnText}>+</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {/* Deposit Items from Inventory */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Deposit Items</Text>
+        {depositableItems.length === 0 ? (
+          <View style={[styles.noDataBox, { marginTop: 12 }]}>
+            <Text style={styles.noDataText}>No crops in inventory</Text>
+          </View>
+        ) : (
+          <View style={{ gap: 2, marginTop: 12 }}>
+            {depositableItems.map((item, i) => (
+              <View
+                key={item.id}
+                style={[
+                  styles.depositRow,
+                  i < depositableItems.length - 1 && {
+                    borderBottomWidth: 1,
+                    borderBottomColor: "rgba(3,32,24,0.06)",
+                  },
+                ]}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <Image
+                    source={ASSET_MAP[item.id] ?? ASSET_MAP["wheat"]}
+                    style={{ width: 24, height: 24 }}
+                    contentFit="contain"
+                  />
+                  <Text style={styles.depositName}>
+                    {formatItemName(item.id)}
+                  </Text>
+                </View>
+                <Text style={styles.depositQty}>x{item.quantity} owned</Text>
+                <TouchableOpacity
+                  style={styles.depositBtn}
+                  onPress={() => handleDepositItem(item.id, item.quantity)}
+                >
+                  <Text style={styles.depositBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -1143,50 +1867,178 @@ function IdolContent() {
   );
 }
 
+function RosterMemberRow({
+  member,
+  myRole,
+  syndicateId,
+  isLast,
+  onActionComplete,
+}: {
+  member: DashboardMember;
+  myRole: "owner" | "officer" | "member" | null;
+  syndicateId: string;
+  isLast: boolean;
+  onActionComplete: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const shortId = member.userId.slice(0, 6);
+  const initial = shortId[0]?.toUpperCase() ?? "?";
+  const myId = getMyUserId();
+  const isMe = myId === member.userId;
+
+  const canKick =
+    !isMe &&
+    ((myRole === "owner" && member.role !== "owner") ||
+      (myRole === "officer" && member.role === "member"));
+
+  const canPromote = myRole === "owner" && member.role === "member";
+  const canDemote = myRole === "owner" && member.role === "officer";
+
+  const handleAction = async (
+    type: string,
+    okType: string,
+    confirmTitle: string,
+    confirmMsg: string,
+  ) => {
+    Alert.alert(confirmTitle, confirmMsg, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Confirm",
+        style: "destructive",
+        onPress: async () => {
+          if (busy) return;
+          setBusy(true);
+          try {
+            await sendSyndicateAction(
+              type,
+              { syndicateId, userId: member.userId },
+              okType,
+            );
+            onActionComplete();
+          } catch (err) {
+            Alert.alert(
+              "Failed",
+              err instanceof Error ? err.message : "Action failed",
+            );
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  return (
+    <View style={[styles.fullMemberRow, !isLast && styles.fullMemberBorder]}>
+      <View style={styles.memberAvatarSmall}>
+        <Text style={styles.avatarInitial}>{initial}</Text>
+        {member.online && <View style={styles.onlineDot} />}
+      </View>
+      <View style={{ flex: 1, marginLeft: 12 }}>
+        <Text style={styles.fullMemberName}>
+          {shortId}
+          {isMe ? " (You)" : ""}
+        </Text>
+        <Text style={styles.fullMemberRole}>
+          {roleLabel(member.role)} · Lv. {member.level}
+        </Text>
+      </View>
+      {(canKick || canPromote || canDemote) && (
+        <View style={{ flexDirection: "row", gap: 6 }}>
+          {canPromote && (
+            <TouchableOpacity
+              style={styles.adminAcceptBtn}
+              disabled={busy}
+              onPress={() =>
+                handleAction(
+                  "PROMOTE_MEMBER",
+                  "PROMOTE_MEMBER_OK",
+                  "Promote to Enforcer",
+                  `Promote ${shortId} to Enforcer?`,
+                )
+              }
+            >
+              <Text style={styles.adminAcceptText}>Promote</Text>
+            </TouchableOpacity>
+          )}
+          {canDemote && (
+            <TouchableOpacity
+              style={styles.adminDemoteBtn}
+              disabled={busy}
+              onPress={() =>
+                handleAction(
+                  "DEMOTE_MEMBER",
+                  "DEMOTE_MEMBER_OK",
+                  "Demote to Member",
+                  `Demote ${shortId} back to Member?`,
+                )
+              }
+            >
+              <Text style={styles.adminDemoteText}>Demote</Text>
+            </TouchableOpacity>
+          )}
+          {canKick && (
+            <TouchableOpacity
+              style={styles.adminRejectBtn}
+              disabled={busy}
+              onPress={() =>
+                handleAction(
+                  "KICK_MEMBER",
+                  "KICK_MEMBER_OK",
+                  "Kick Member",
+                  `Remove ${shortId} from the syndicate?`,
+                )
+              }
+            >
+              <Text style={styles.adminRejectText}>Kick</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
 function RosterContent() {
-  const { joinedSyndicate } = useSyndicateStore();
+  const { joinedSyndicate, dashboard } = useSyndicateStore();
+  const { refetch } = useSyndicateDashboard();
+  const myRole = useMyBackendRole();
+  const members = dashboard?.members ?? [];
+  const sorted = useMemo(
+    () =>
+      members
+        .slice()
+        .sort(
+          (a, b) => Number(b.online) - Number(a.online) || b.level - a.level,
+        ),
+    [members],
+  );
+
   return (
     <View style={styles.tabContainer}>
       <View style={styles.card}>
         <Text style={styles.cardTitle}>
-          Members ({joinedSyndicate?.memberCount})
+          Members (
+          {dashboard?.totalMembers ?? joinedSyndicate?.memberCount ?? 0})
         </Text>
-        <View style={{ gap: 0, marginTop: 14 }}>
-          {[
-            {
-              initial: "S",
-              name: "Satoshi_Grind",
-              role: "Grandmaster · Lv. 45",
-              wealth: "$2.4M",
-              online: true,
-            },
-            {
-              initial: "C",
-              name: "CropCommander",
-              role: "Enforcer · Lv. 38",
-              wealth: "$1.1M",
-              online: true,
-            },
-          ].map((m, i, arr) => (
-            <View
-              key={m.name}
-              style={[
-                styles.fullMemberRow,
-                i < arr.length - 1 && styles.fullMemberBorder,
-              ]}
-            >
-              <View style={styles.memberAvatarSmall}>
-                <Text style={styles.avatarInitial}>{m.initial}</Text>
-                {m.online && <View style={styles.onlineDot} />}
-              </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.fullMemberName}>{m.name}</Text>
-                <Text style={styles.fullMemberRole}>{m.role}</Text>
-              </View>
-              <Text style={styles.wealthLabel}>{m.wealth}</Text>
-            </View>
-          ))}
-        </View>
+        {sorted.length === 0 ? (
+          <View style={[styles.noDataBox, { marginTop: 14 }]}>
+            <Text style={styles.noDataText}>No members loaded</Text>
+          </View>
+        ) : (
+          <View style={{ gap: 0, marginTop: 14 }}>
+            {sorted.map((m, i, arr) => (
+              <RosterMemberRow
+                key={m.userId}
+                member={m}
+                myRole={myRole}
+                syndicateId={joinedSyndicate?.id ?? ""}
+                isLast={i === arr.length - 1}
+                onActionComplete={refetch}
+              />
+            ))}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -2105,5 +2957,72 @@ const styles = StyleSheet.create({
     fontFamily: "Space Mono",
     fontWeight: "700",
     color: "#032018",
+  },
+
+  // ── ADMIN ACTION BUTTONS
+  cancelBtn: {
+    backgroundColor: "#FF383C",
+    borderWidth: 0,
+  },
+  cancelBtnText: {
+    color: "white",
+    fontSize: 11,
+    fontFamily: "Space Mono",
+    fontWeight: "700",
+  },
+  cancelRequestBtn: {
+    marginTop: 8,
+    backgroundColor: "rgba(3, 32, 24, 0.08)",
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  cancelRequestText: {
+    fontSize: 11,
+    fontFamily: "Space Mono",
+    fontWeight: "700",
+    color: "#032018",
+  },
+  adminAcceptBtn: {
+    backgroundColor: "#DAF8B7",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(113,179,18,0.3)",
+  },
+  adminAcceptText: {
+    fontSize: 10,
+    fontFamily: "Space Mono",
+    fontWeight: "700",
+    color: "#032018",
+  },
+  adminRejectBtn: {
+    backgroundColor: "rgba(255,56,60,0.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,56,60,0.2)",
+  },
+  adminRejectText: {
+    fontSize: 10,
+    fontFamily: "Space Mono",
+    fontWeight: "700",
+    color: "#FF383C",
+  },
+  adminDemoteBtn: {
+    backgroundColor: "rgba(255,176,56,0.1)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,176,56,0.3)",
+  },
+  adminDemoteText: {
+    fontSize: 10,
+    fontFamily: "Space Mono",
+    fontWeight: "700",
+    color: "#CC8800",
   },
 });

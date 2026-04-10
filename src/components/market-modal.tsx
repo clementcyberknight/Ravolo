@@ -109,6 +109,131 @@ function generateRequestId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+interface MarketListItem {
+  id: string;
+  item: string;
+  name: string;
+  buy: number;
+  sell: number;
+  image: any;
+  isSeed: boolean;
+  ownedQuantity: number;
+  usesFallbackAsset: boolean;
+}
+
+const marketKeyExtractor = (item: MarketListItem) => item.id;
+const saleKeyExtractor = (item: { id: string }) => item.id;
+
+const MarketItemRow = React.memo(function MarketItemRow({
+  item,
+  isBuying,
+  isSelling,
+  onBuy,
+  onSell,
+}: {
+  item: MarketListItem;
+  isBuying: boolean;
+  isSelling: boolean;
+  onBuy: (id: string) => void;
+  onSell: (id: string) => void;
+}) {
+  return (
+    <View style={styles.playerSaleCard}>
+      <View style={styles.cardLeft}>
+        <Image
+          source={item.image}
+          style={styles.saleItemCover}
+          contentFit="contain"
+        />
+        <View style={styles.cardInfo}>
+          <Text style={styles.saleItemTitle}>{item.name}</Text>
+          <Text style={styles.sellerName}>
+            {item.ownedQuantity > 0
+              ? `Owned ${item.ownedQuantity}`
+              : item.isSeed
+                ? "Seedling"
+                : "Marketplace"}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.marketPriceColumn}>
+        <Pressable
+          style={[styles.salePriceBox, isBuying && styles.buyButtonDisabled]}
+          onPress={() => onBuy(item.id)}
+          disabled={isBuying}
+        >
+          <Text style={styles.salePriceLabel}>Buy</Text>
+          <Text style={styles.salePriceText}>{item.buy.toLocaleString()}</Text>
+          <Image
+            source={coinIcon}
+            style={styles.buyButtonIcon}
+            contentFit="contain"
+          />
+        </Pressable>
+        <Pressable
+          style={[
+            styles.salePriceBox,
+            (item.ownedQuantity <= 0 || isSelling) && styles.buyButtonDisabled,
+          ]}
+          onPress={() => onSell(item.id)}
+          disabled={item.ownedQuantity <= 0 || isSelling}
+        >
+          <Text style={styles.salePriceLabel}>Sell</Text>
+          <Text style={styles.salePriceText}>
+            {item.sell.toLocaleString()}
+          </Text>
+          <Image
+            source={coinIcon}
+            style={styles.buyButtonIcon}
+            contentFit="contain"
+          />
+        </Pressable>
+      </View>
+    </View>
+  );
+});
+
+const SaleInventoryCard = React.memo(function SaleInventoryCard({
+  item,
+  isSelected,
+  onSelect,
+}: {
+  item: { id: string; quantity: number };
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <Pressable
+      style={[styles.invItemCard, isSelected && styles.invItemCardSelected]}
+      onPress={() => onSelect(item.id)}
+    >
+      <Image
+        source={getMarketAsset(item.id)}
+        style={styles.invItemImage}
+        contentFit="contain"
+      />
+      <Text style={styles.invItemTitle}>{formatMarketName(item.id)}</Text>
+      <Text style={styles.invItemCount}>x{item.quantity}</Text>
+    </Pressable>
+  );
+});
+
+const MarketListEmpty = React.memo(function MarketListEmpty() {
+  return (
+    <View style={styles.marketEmptyState}>
+      <Text style={styles.emptyStateText}>No market items found.</Text>
+    </View>
+  );
+});
+
+const InventoryListEmpty = React.memo(function InventoryListEmpty() {
+  return (
+    <View style={styles.marketEmptyState}>
+      <Text style={styles.emptyStateText}>No inventory items found.</Text>
+    </View>
+  );
+});
+
 // ------------------------ MOCK DATA ------------------------
 const PLAYER_SALES = [
   {
@@ -464,12 +589,10 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
     }
   };
 
-  const openBuyModal = (itemId: string) => {
+  const openBuyModal = useCallback((itemId: string) => {
     const currentPrices = useMarketStore.getState().prices;
     const priceEntry = currentPrices[itemId];
-    if (!priceEntry) {
-      return;
-    }
+    if (!priceEntry) return;
 
     const currentCoins = useGameStore.getState().coins;
     const maxAffordableQuantity = Math.max(
@@ -479,7 +602,7 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
 
     setBuyModalItemId(itemId);
     setBuyModalQuantity(Math.max(1, maxAffordableQuantity || 1));
-  };
+  }, []);
 
   const handleSellMarketItem = async (itemId: string, quantity: number) => {
     const ownedQuantity = useInventoryStore.getState().items[itemId]?.quantity || 0;
@@ -530,107 +653,49 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
     }
   };
 
-  const openSellModal = (itemId: string) => {
-    const ownedQuantity = useInventoryStore.getState().items[itemId]?.quantity || 0;
+  const openSellModal = useCallback((itemId: string) => {
+    const ownedQuantity =
+      useInventoryStore.getState().items[itemId]?.quantity || 0;
     if (ownedQuantity <= 0) {
-      Alert.alert("Nothing to sell", `You do not have any ${formatMarketName(itemId)} to sell.`);
+      Alert.alert(
+        "Nothing to sell",
+        `You do not have any ${formatMarketName(itemId)} to sell.`,
+      );
       return;
     }
 
     setSellModalItemId(itemId);
     setSellModalQuantity(1);
-  };
+  }, []);
 
   const renderMarketItem = useCallback(
-    ({ item }: { item: (typeof liveMarketItems)[number] }) => (
-      <View style={styles.playerSaleCard}>
-        <View style={styles.cardLeft}>
-          <Image
-            source={item.image}
-            style={styles.saleItemCover}
-            contentFit="contain"
-          />
-          <View style={styles.cardInfo}>
-            <Text style={styles.saleItemTitle}>{item.name}</Text>
-            <Text style={styles.sellerName}>
-              {item.ownedQuantity > 0
-                ? `Owned ${item.ownedQuantity}`
-                : item.isSeed
-                  ? "Seedling"
-                  : "Marketplace"}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.marketPriceColumn}>
-          <Pressable
-            style={[
-              styles.salePriceBox,
-              activeMarketActionId === `buy:${item.id}` && styles.buyButtonDisabled,
-            ]}
-            onPress={() => openBuyModal(item.id)}
-            disabled={activeMarketActionId === `buy:${item.id}`}
-          >
-            <Text style={styles.salePriceLabel}>Buy</Text>
-            <Text style={styles.salePriceText}>{item.buy.toLocaleString()}</Text>
-            <Image
-              source={coinIcon}
-              style={styles.buyButtonIcon}
-              contentFit="contain"
-            />
-          </Pressable>
-          <Pressable
-            style={[
-              styles.salePriceBox,
-              item.ownedQuantity <= 0 && styles.buyButtonDisabled,
-              activeMarketActionId === `sell:${item.id}` && styles.buyButtonDisabled,
-            ]}
-            onPress={() => openSellModal(item.id)}
-            disabled={
-              item.ownedQuantity <= 0 ||
-              activeMarketActionId === `sell:${item.id}`
-            }
-          >
-            <Text style={styles.salePriceLabel}>Sell</Text>
-            <Text style={styles.salePriceText}>{item.sell.toLocaleString()}</Text>
-            <Image
-              source={coinIcon}
-              style={styles.buyButtonIcon}
-              contentFit="contain"
-            />
-          </Pressable>
-        </View>
-      </View>
+    ({ item }: { item: MarketListItem }) => (
+      <MarketItemRow
+        item={item}
+        isBuying={activeMarketActionId === `buy:${item.id}`}
+        isSelling={activeMarketActionId === `sell:${item.id}`}
+        onBuy={openBuyModal}
+        onSell={openSellModal}
+      />
     ),
-    [activeMarketActionId],
+    [activeMarketActionId, openBuyModal, openSellModal],
   );
 
-  const renderSaleInventoryItem = useCallback(
-    ({ item }: { item: (typeof filteredInventoryList)[number] }) => {
-      const isSelected = selectedInventoryId === item.id;
+  const onSelectSaleItem = useCallback((id: string) => {
+    setSelectedInventoryId(id);
+    setSaleQuantity(1);
+    setSalePrice(10);
+  }, []);
 
-      return (
-        <Pressable
-          style={[
-            styles.invItemCard,
-            isSelected && styles.invItemCardSelected,
-          ]}
-          onPress={() => {
-            setSelectedInventoryId(item.id);
-            setSaleQuantity(1);
-            setSalePrice(10);
-          }}
-        >
-          <Image
-            source={getMarketAsset(item.id)}
-            style={styles.invItemImage}
-            contentFit="contain"
-          />
-          <Text style={styles.invItemTitle}>{formatMarketName(item.id)}</Text>
-          <Text style={styles.invItemCount}>x{item.quantity}</Text>
-        </Pressable>
-      );
-    },
-    [selectedInventoryId],
+  const renderSaleInventoryItem = useCallback(
+    ({ item }: { item: { id: string; quantity: number } }) => (
+      <SaleInventoryCard
+        item={item}
+        isSelected={selectedInventoryId === item.id}
+        onSelect={onSelectSaleItem}
+      />
+    ),
+    [selectedInventoryId, onSelectSaleItem],
   );
 
   const submitRequest = () => {
@@ -723,29 +788,23 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
     </View>
   );
 
-  const renderAllSalesTab = () => (
-    <View style={styles.listContainer}>
-      <View style={styles.marketSearchBox}>
-        <TextInput
-          placeholder="Search market items..."
-          style={styles.marketSearchInput}
-          value={marketSearchQuery}
-          onChangeText={setMarketSearchQuery}
-        />
+  const marketListHeader = useMemo(
+    () => (
+      <View style={styles.listContainer}>
+        <View style={styles.marketSearchBox}>
+          <TextInput
+            placeholder="Search market items..."
+            style={styles.marketSearchInput}
+            value={marketSearchQuery}
+            onChangeText={setMarketSearchQuery}
+          />
+        </View>
+        <Text style={styles.marketHintText}>
+          Owned items are pinned to the top.
+        </Text>
       </View>
-      <Text style={styles.marketHintText}>Owned items are pinned to the top.</Text>
-      <FlashList
-        data={liveMarketItems}
-        renderItem={renderMarketItem}
-        keyExtractor={(item) => item.id}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.marketEmptyState}>
-            <Text style={styles.emptyStateText}>No market items found.</Text>
-          </View>
-        }
-      />
-    </View>
+    ),
+    [marketSearchQuery],
   );
 
   const renderMySalesTab = () => (
@@ -882,15 +941,12 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
             <FlashList
               data={filteredInventoryList}
               renderItem={renderSaleInventoryItem}
-              keyExtractor={(item) => item.id}
+              keyExtractor={saleKeyExtractor}
+              extraData={selectedInventoryId}
               numColumns={3}
               contentContainerStyle={styles.createSaleGrid}
               showsVerticalScrollIndicator={false}
-              ListEmptyComponent={
-                <View style={styles.marketEmptyState}>
-                  <Text style={styles.emptyStateText}>No inventory items found.</Text>
-                </View>
-              }
+              ListEmptyComponent={InventoryListEmpty}
             />
           </View>
 
@@ -1483,7 +1539,7 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
   // --- MAIN LAYOUT ---
   if (!visible) return null;
 
-  console.log("[market] fallback asset ids", missingMarketAssetIds);
+  const showFlashList = topTab === "buy_sell" && buySellTab === "all";
 
   return (
     <Modal visible={visible} transparent animationType="slide">
@@ -1584,25 +1640,39 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
           </View>
         )}
 
-        {/* List Areas */}
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {topTab === "buy_sell" &&
-            buySellTab === "merchant" &&
-            renderMerchantTab()}
-          {topTab === "buy_sell" && buySellTab === "all" && renderAllSalesTab()}
-          {topTab === "buy_sell" &&
-            buySellTab === "my_sales" &&
-            renderMySalesTab()}
-          {topTab === "requests" &&
-            requestsTab === "open" &&
-            renderRequestsOpenTab()}
-          {topTab === "requests" &&
-            requestsTab === "my_requests" &&
-            renderMyRequestsTab()}
-        </ScrollView>
+        {/* FlashList as primary scrollable for "all" tab (NOT nested in ScrollView) */}
+        {showFlashList ? (
+          <View style={styles.flashListContainer}>
+            <FlashList
+              data={liveMarketItems}
+              renderItem={renderMarketItem}
+              keyExtractor={marketKeyExtractor}
+              extraData={activeMarketActionId}
+              showsVerticalScrollIndicator={false}
+              ListHeaderComponent={marketListHeader}
+              ListEmptyComponent={MarketListEmpty}
+              contentContainerStyle={styles.flashListContent}
+            />
+          </View>
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {topTab === "buy_sell" &&
+              buySellTab === "merchant" &&
+              renderMerchantTab()}
+            {topTab === "buy_sell" &&
+              buySellTab === "my_sales" &&
+              renderMySalesTab()}
+            {topTab === "requests" &&
+              requestsTab === "open" &&
+              renderRequestsOpenTab()}
+            {topTab === "requests" &&
+              requestsTab === "my_requests" &&
+              renderMyRequestsTab()}
+          </ScrollView>
+        )}
 
         {/* Floating Close Button */}
         <View
@@ -1624,6 +1694,8 @@ export const MarketModal = ({ visible, onClose }: MarketModalProps) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFFFFF" },
   scrollContent: { paddingBottom: 100 },
+  flashListContainer: { flex: 1 },
+  flashListContent: { paddingBottom: 100 },
   marketSearchBox: {
     backgroundColor: "#F5F5F5",
     borderRadius: 12,

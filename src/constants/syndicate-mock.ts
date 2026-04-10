@@ -15,7 +15,10 @@ export type Syndicate = {
   minAsset: number;
   memberCount: number;
   maxMembers: number;
+  /** Capacity / recruitment (legacy + list UI). */
   status: "Open" | "Closed" | "Full";
+  /** Server `visibility` — shown as Public/Private in detail Status card. */
+  visibility?: "public" | "private";
   members: SyndicateMember[];
 };
 

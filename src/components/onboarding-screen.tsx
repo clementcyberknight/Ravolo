@@ -69,7 +69,9 @@ export function OnboardingScreen() {
   const setSeekerAuthenticated = useWalletStore(
     (state) => state.setSeekerAuthenticated,
   );
-  const restoreLocalWallet = useWalletStore((state) => state.restoreLocalWallet);
+  const restoreLocalWallet = useWalletStore(
+    (state) => state.restoreLocalWallet,
+  );
   const createLocalWallet = useWalletStore((state) => state.createLocalWallet);
   const getLocalWalletSecretKey = useWalletStore(
     (state) => state.getLocalWalletSecretKey,
@@ -137,8 +139,9 @@ export function OnboardingScreen() {
       }
 
       completeOnboarding();
-    } catch {
-      // If auth fails, keep onboarding open so user can retry.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("[onboarding] auth failed:", message, error);
     } finally {
       setIsAuthenticating(false);
     }
