@@ -5,6 +5,25 @@ type ChallengeResponse = {
   message: string;
 };
 
+export type AuthChallengeParams =
+  | { walletFamily: "solana" }
+  | { walletFamily: "eip155"; chainId: number };
+
+export type VerifyWalletBody =
+  | {
+      walletFamily: "solana";
+      wallet: string;
+      signature: string;
+      challengeId: string;
+    }
+  | {
+      walletFamily: "eip155";
+      chainId: number;
+      wallet: string;
+      signature: string;
+      challengeId: string;
+    };
+
 export type AuthProfile = {
   id: string;
   walletAddress: string;
@@ -113,15 +132,27 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export async function getAuthChallenge(): Promise<ChallengeResponse> {
-  return requestJson<ChallengeResponse>("/auth/challenge");
+function challengeQuery(params: AuthChallengeParams): string {
+  if (params.walletFamily === "solana") {
+    return "walletFamily=solana";
+  }
+  return `walletFamily=eip155&chainId=${encodeURIComponent(String(params.chainId))}`;
 }
 
-export async function verifyWalletSignature(input: {
-  wallet: string;
-  signature: string;
-  challengeId: string;
-}): Promise<VerifyResponse> {
+/**
+ * Request a signable challenge. Backend should scope the nonce to the same
+ * `walletFamily` (and `chainId` for EVM) that will be used on `/auth/verify`.
+ */
+export async function getAuthChallenge(
+  params: AuthChallengeParams,
+): Promise<ChallengeResponse> {
+  const q = challengeQuery(params);
+  return requestJson<ChallengeResponse>(`/auth/challenge?${q}`);
+}
+
+export async function verifyWalletSignature(
+  input: VerifyWalletBody,
+): Promise<VerifyResponse> {
   return requestJson<VerifyResponse>("/auth/verify", {
     method: "POST",
     headers: {

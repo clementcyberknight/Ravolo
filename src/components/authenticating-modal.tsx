@@ -4,17 +4,21 @@ import { ActivityIndicator, Modal, StyleSheet, Text, View } from "react-native";
 interface AuthenticatingModalProps {
   visible: boolean;
   mode: "authenticating" | "creating_wallet";
+  /** Which chain onboarding is using (copy only). */
+  chain: "solana" | "monad";
 }
 
 export const AuthenticatingModal = ({
   visible,
   mode,
+  chain,
 }: AuthenticatingModalProps) => {
   const title =
     mode === "creating_wallet" ? "Creating wallet" : "Authenticating";
+  const chainLabel = chain === "monad" ? "Monad" : "Solana";
   const subtitle =
     mode === "creating_wallet"
-      ? "Setting up your secure Solana wallet..."
+      ? `Setting up your secure ${chainLabel} wallet...`
       : "Checking your device status...";
 
   return (

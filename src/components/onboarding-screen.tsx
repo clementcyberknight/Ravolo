@@ -10,6 +10,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import { privateKeyToAccount } from "viem/accounts";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -22,6 +23,7 @@ import nacl from "tweetnacl";
 import { AuthenticatingModal } from "@/components/authenticating-modal";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { MONAD_MAINNET_CHAIN_ID } from "@/constants/auth-chain";
 import { getAuthChallenge, verifyWalletSignature } from "@/services/auth-api";
 import { websocketManager } from "@/services/websocket-manager";
 import { useAppStore } from "@/store/app-store";
@@ -59,8 +61,11 @@ const ONBOARDING_DATA = [
   },
 ];
 
+type OnboardingChain = "solana" | "monad";
+
 export function OnboardingScreen() {
   const [index, setIndex] = useState(0);
+  const [selectedChain, setSelectedChain] = useState<OnboardingChain>("solana");
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authMode, setAuthMode] = useState<
     "authenticating" | "creating_wallet"
@@ -75,6 +80,15 @@ export function OnboardingScreen() {
   const createLocalWallet = useWalletStore((state) => state.createLocalWallet);
   const getLocalWalletSecretKey = useWalletStore(
     (state) => state.getLocalWalletSecretKey,
+  );
+  const restoreMonadLocalWallet = useWalletStore(
+    (state) => state.restoreMonadLocalWallet,
+  );
+  const createMonadLocalWallet = useWalletStore(
+    (state) => state.createMonadLocalWallet,
+  );
+  const getMonadPrivateKey = useWalletStore(
+    (state) => state.getMonadPrivateKey,
   );
   const setSession = useAuthStore((state) => state.setSession);
   const { account, connect, signMessage } = useMobileWallet();
@@ -101,7 +115,45 @@ export function OnboardingScreen() {
 
     setIsAuthenticating(true);
     try {
-      const challenge = await getAuthChallenge();
+      if (selectedChain === "monad") {
+        const challenge = await getAuthChallenge({
+          walletFamily: "eip155",
+          chainId: MONAD_MAINNET_CHAIN_ID,
+        });
+
+        const existingWallet = await restoreMonadLocalWallet();
+        setAuthMode(existingWallet ? "authenticating" : "creating_wallet");
+        const wallet = existingWallet ?? (await createMonadLocalWallet());
+        const privateKey = await getMonadPrivateKey();
+        if (!privateKey) {
+          throw new Error("Monad wallet private key is missing");
+        }
+
+        const account = privateKeyToAccount(privateKey);
+        if (account.address !== wallet.address) {
+          throw new Error("Monad wallet address mismatch");
+        }
+
+        const signature = await account.signMessage({
+          message: challenge.message,
+        });
+
+        const authResult = await verifyWalletSignature({
+          walletFamily: "eip155",
+          chainId: MONAD_MAINNET_CHAIN_ID,
+          wallet: account.address,
+          signature,
+          challengeId: challenge.challengeId,
+        });
+
+        await setSession(authResult);
+        websocketManager.connect(authResult.accessToken);
+        setSeekerAuthenticated(false);
+        completeOnboarding();
+        return;
+      }
+
+      const challenge = await getAuthChallenge({ walletFamily: "solana" });
       const challengePayload = new TextEncoder().encode(challenge.message);
 
       if (isSeekerDevice()) {
@@ -109,6 +161,7 @@ export function OnboardingScreen() {
         const connectedAccount = account ?? (await connect());
         const signatureBytes = await signMessage(challengePayload);
         const authResult = await verifyWalletSignature({
+          walletFamily: "solana",
           wallet: connectedAccount.address.toBase58(),
           signature: bs58.encode(signatureBytes),
           challengeId: challenge.challengeId,
@@ -128,6 +181,7 @@ export function OnboardingScreen() {
 
         const signature = nacl.sign.detached(challengePayload, localSecretKey);
         const authResult = await verifyWalletSignature({
+          walletFamily: "solana",
           wallet: wallet.address,
           signature: bs58.encode(signature),
           challengeId: challenge.challengeId,
@@ -211,6 +265,48 @@ export function OnboardingScreen() {
             <ThemedText style={styles.description}>
               {currentSlide.description}
             </ThemedText>
+
+            {isLast ? (
+              <View style={styles.chainSection}>
+                <ThemedText style={styles.chainSectionTitle}>Network</ThemedText>
+                <View style={styles.chainRow}>
+                  <Pressable
+                    onPress={() => setSelectedChain("solana")}
+                    style={[
+                      styles.chainOption,
+                      selectedChain === "solana" && styles.chainOptionSelected,
+                    ]}
+                  >
+                    <ThemedText
+                      style={[
+                        styles.chainOptionText,
+                        selectedChain === "solana" &&
+                          styles.chainOptionTextSelected,
+                      ]}
+                    >
+                      Solana
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setSelectedChain("monad")}
+                    style={[
+                      styles.chainOption,
+                      selectedChain === "monad" && styles.chainOptionSelected,
+                    ]}
+                  >
+                    <ThemedText
+                      style={[
+                        styles.chainOptionText,
+                        selectedChain === "monad" &&
+                          styles.chainOptionTextSelected,
+                      ]}
+                    >
+                      Monad
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
           </Animated.View>
         </ScrollView>
 
@@ -257,7 +353,11 @@ export function OnboardingScreen() {
           </Pressable>
         </View>
       </View>
-      <AuthenticatingModal visible={isAuthenticating} mode={authMode} />
+      <AuthenticatingModal
+        visible={isAuthenticating}
+        mode={authMode}
+        chain={selectedChain === "monad" ? "monad" : "solana"}
+      />
     </ThemedView>
   );
 }
@@ -342,6 +442,42 @@ const styles = StyleSheet.create({
     color: "#77574D",
     lineHeight: 29,
     fontWeight: "500",
+  },
+  chainSection: {
+    marginTop: 28,
+  },
+  chainSectionTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    color: "#032018",
+    marginBottom: 12,
+  },
+  chainRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  chainOption: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 2,
+    borderColor: "#DEE5D6",
+    alignItems: "center",
+  },
+  chainOptionSelected: {
+    borderColor: "#0D631B",
+    backgroundColor: "rgba(13, 99, 27, 0.08)",
+  },
+  chainOptionText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#77574D",
+  },
+  chainOptionTextSelected: {
+    color: "#0D631B",
   },
   footer: {
     flexDirection: "row",
