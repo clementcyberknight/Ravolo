@@ -3,6 +3,7 @@ import { ScreenHeader } from "@/components/screen-header";
 import { SubTabs } from "@/components/sub-tabs";
 import { ThemedView } from "@/components/themed-view";
 import { useDebounce } from "@/hooks/use-debounce";
+import { syndicateWsCall } from "@/services/syndicate-ws-client";
 import { websocketManager } from "@/services/websocket-manager";
 import { useGameStore } from "@/store/game-store";
 import { useInventoryStore } from "@/store/inventory-store";
@@ -1802,66 +1803,503 @@ function BankContent() {
   );
 }
 
+const WAR_TROOP_TYPES = [
+  "worker",
+  "tractor",
+  "scarecrow_breaker",
+  "crop_duster",
+  "siege_harvester",
+] as const;
+
+const SHIELD_TYPES = [
+  "harvest_dome",
+  "gold_vault_lock",
+  "militia_surge",
+  "crop_decoy",
+  "ceasefire",
+] as const;
+
+function formatTroopLabel(id: string): string {
+  return id.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function WarContent() {
+  const joinedSyndicate = useSyndicateStore((s) => s.joinedSyndicate);
+  const myRole = useMyBackendRole();
+  const canManage = myRole === "owner" || myRole === "officer";
+
+  const [loading, setLoading] = useState(true);
+  const [activeWar, setActiveWar] = useState<{
+    warId: string;
+    attackerId: string;
+    defenderId: string;
+    phase: string;
+    endTimeMs: number;
+  } | null>(null);
+  const [troopLevels, setTroopLevels] = useState<Record<string, number>>({});
+  const [attackTroops, setAttackTroops] = useState<Record<string, string>>({});
+  const [targetSyndicateId, setTargetSyndicateId] = useState("");
+  const [shieldType, setShieldType] =
+    useState<(typeof SHIELD_TYPES)[number]>("harvest_dome");
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const loadWar = useCallback(async () => {
+    if (!joinedSyndicate) return;
+    setLoading(true);
+    try {
+      const war = await syndicateWsCall<Record<string, unknown>>(
+        "VIEW_ACTIVE_WAR",
+        { syndicateId: joinedSyndicate.id },
+        "VIEW_ACTIVE_WAR_OK",
+      );
+      const wid = war.warId;
+      if (typeof wid === "string" && wid.length > 0) {
+        setActiveWar({
+          warId: wid,
+          attackerId: typeof war.attackerId === "string" ? war.attackerId : "",
+          defenderId: typeof war.defenderId === "string" ? war.defenderId : "",
+          phase: typeof war.phase === "string" ? war.phase : "preparation",
+          endTimeMs:
+            typeof war.endTimeMs === "number" ? war.endTimeMs : Date.now(),
+        });
+      } else {
+        setActiveWar(null);
+      }
+    } catch {
+      setActiveWar(null);
+    }
+
+    try {
+      const levels = await syndicateWsCall<Record<string, unknown>>(
+        "VIEW_TROOP_LEVELS",
+        { syndicateId: joinedSyndicate.id },
+        "VIEW_TROOP_LEVELS_OK",
+      );
+      setTroopLevels(levels as Record<string, number>);
+    } catch {
+      setTroopLevels({});
+    } finally {
+      setLoading(false);
+    }
+  }, [joinedSyndicate]);
+
+  useEffect(() => {
+    void loadWar();
+  }, [loadWar]);
+
+  const runAction = async (key: string, fn: () => Promise<void>) => {
+    if (busyKey) return;
+    setBusyKey(key);
+    try {
+      await fn();
+      await loadWar();
+    } catch (err) {
+      Alert.alert(
+        "War",
+        err instanceof Error ? err.message : "Action failed",
+      );
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  if (!joinedSyndicate) return null;
+
+  if (loading && !activeWar && Object.keys(troopLevels).length === 0) {
+    return (
+      <View style={[styles.tabContainer, { paddingVertical: 40 }]}>
+        <ActivityIndicator color="#71B312" />
+        <Text style={[styles.reqLabel, { marginTop: 10, textAlign: "center" }]}>
+          Loading war room…
+        </Text>
+      </View>
+    );
+  }
+
+  const isAttacker =
+    activeWar && activeWar.attackerId === joinedSyndicate.id;
+  const inBattle = activeWar?.phase === "active";
+
   return (
-    <View style={styles.tabContainer}>
+    <ScrollView
+      style={styles.tabScroll}
+      contentContainerStyle={styles.tabContainer}
+      showsVerticalScrollIndicator={false}
+    >
+      <TouchableOpacity
+        style={[styles.card, { marginBottom: 8 }]}
+        onPress={() => void loadWar()}
+        disabled={!!busyKey}
+      >
+        <Text style={styles.cardTitle}>Refresh status</Text>
+        <Text style={styles.statSub}>Tap to reload war and troop levels</Text>
+      </TouchableOpacity>
+
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Defense Status</Text>
+        <Text style={styles.cardTitle}>Defense</Text>
         <View style={styles.defenseGrid}>
           <View style={styles.defenseItem}>
             <Shield size={16} color="#71B312" />
-            <Text style={styles.defenseLabel}>Shields</Text>
-            <Text style={styles.defenseValue}>Online</Text>
+            <Text style={styles.defenseLabel}>Syndicate</Text>
+            <Text style={styles.defenseValue} numberOfLines={1}>
+              {joinedSyndicate.name}
+            </Text>
           </View>
           <View style={styles.defenseItem}>
-            <Text style={styles.defenseLabel}>Garrison</Text>
-            <Text style={styles.defenseValue}>12/20</Text>
+            <Text style={styles.defenseLabel}>Role</Text>
+            <Text style={styles.defenseValue}>
+              {myRole === "owner"
+                ? "Leader"
+                : myRole === "officer"
+                  ? "Officer"
+                  : "Member"}
+            </Text>
           </View>
         </View>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Active Wars</Text>
-        <View style={styles.noDataBox}>
-          <Text style={styles.noDataText}>No active conflicts</Text>
-        </View>
+        <Text style={styles.cardTitle}>Active war</Text>
+        {!activeWar ? (
+          <View style={styles.noDataBox}>
+            <Text style={styles.noDataText}>No active war</Text>
+          </View>
+        ) : (
+          <View style={{ marginTop: 10, gap: 8 }}>
+            <Text style={styles.depositQty}>War {activeWar.warId}</Text>
+            <Text style={styles.depositQty}>
+              Phase: {activeWar.phase}
+              {activeWar.endTimeMs > 0
+                ? ` · ends ${new Date(activeWar.endTimeMs).toLocaleString()}`
+                : ""}
+            </Text>
+            <Text style={styles.depositQty} numberOfLines={2}>
+              {isAttacker ? "You are attacking" : "You are defending"} · vs{" "}
+              {isAttacker ? activeWar.defenderId : activeWar.attackerId}
+            </Text>
+          </View>
+        )}
       </View>
-    </View>
+
+      {canManage && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Declare war</Text>
+          <Text style={[styles.statSub, { marginBottom: 8 }]}>
+            Target syndicate id (enemy)
+          </Text>
+          <TextInput
+            style={styles.inputField}
+            value={targetSyndicateId}
+            onChangeText={setTargetSyndicateId}
+            placeholder="syn_…"
+            placeholderTextColor="rgba(3,32,24,0.35)"
+            autoCapitalize="none"
+          />
+          <TouchableOpacity
+            style={[
+              styles.depositBtn,
+              {
+                marginTop: 12,
+                alignSelf: "flex-start",
+                paddingHorizontal: 16,
+                backgroundColor: "#032018",
+              },
+            ]}
+            disabled={!!busyKey || !targetSyndicateId.trim()}
+            onPress={() =>
+              runAction("declare", () =>
+                syndicateWsCall("DECLARE_WAR", {
+                  syndicateId: joinedSyndicate.id,
+                  targetSyndicateId: targetSyndicateId.trim(),
+                }, "DECLARE_WAR_OK").then(() => undefined),
+              )
+            }
+          >
+            <Text style={{ color: "white", fontWeight: "700" }}>
+              {busyKey === "declare" ? "…" : "Declare war"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Troop upgrades</Text>
+        <Text style={[styles.statSub, { marginBottom: 10 }]}>
+          Bank gold · officer or leader
+        </Text>
+        {WAR_TROOP_TYPES.map((t) => (
+          <View
+            key={t}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingVertical: 8,
+              borderBottomWidth: 1,
+              borderBottomColor: "rgba(3,32,24,0.06)",
+            }}
+          >
+            <View>
+              <Text style={styles.depositName}>{formatTroopLabel(t)}</Text>
+              <Text style={styles.depositQty}>
+                Level {troopLevels[t] ?? 0}
+                {troopLevels[t] != null && troopLevels[t] >= 5 ? " (max)" : ""}
+              </Text>
+            </View>
+            {canManage && (troopLevels[t] ?? 0) < 5 && (
+              <TouchableOpacity
+                style={[styles.adminAcceptBtn, { opacity: busyKey ? 0.5 : 1 }]}
+                disabled={!!busyKey}
+                onPress={() =>
+                  runAction(`up-${t}`, () =>
+                    syndicateWsCall("UPGRADE_TROOP", {
+                      syndicateId: joinedSyndicate.id,
+                      troopType: t,
+                    }, "UPGRADE_TROOP_OK").then(() => undefined),
+                  )
+                }
+              >
+                <Text style={styles.adminAcceptText}>Upgrade</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ))}
+      </View>
+
+      {activeWar && inBattle && isAttacker && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>War attack</Text>
+          <Text style={[styles.statSub, { marginBottom: 8 }]}>
+            Commit troops (phase must be active)
+          </Text>
+          {WAR_TROOP_TYPES.map((t) => (
+            <View key={`atk-${t}`} style={{ marginBottom: 8 }}>
+              <Text style={styles.reqLabel}>{formatTroopLabel(t)}</Text>
+              <TextInput
+                style={[styles.inputField, { marginTop: 4 }]}
+                keyboardType="numeric"
+                value={attackTroops[t] ?? ""}
+                onChangeText={(v) =>
+                  setAttackTroops((prev) => ({ ...prev, [t]: v }))
+                }
+                placeholder="0"
+                placeholderTextColor="rgba(3,32,24,0.35)"
+              />
+            </View>
+          ))}
+          <TouchableOpacity
+            style={[
+              styles.depositBtn,
+              {
+                marginTop: 8,
+                alignSelf: "flex-start",
+                backgroundColor: "#FF383C",
+                paddingHorizontal: 16,
+              },
+            ]}
+            disabled={!!busyKey}
+            onPress={() => {
+              const troops: Record<string, number> = {};
+              for (const t of WAR_TROOP_TYPES) {
+                const n = parseInt(attackTroops[t] ?? "0", 10);
+                if (n > 0) troops[t] = n;
+              }
+              if (Object.keys(troops).length === 0) {
+                Alert.alert("War attack", "Enter at least one troop count.");
+                return;
+              }
+              runAction("attack", () =>
+                syndicateWsCall("WAR_ATTACK", {
+                  syndicateId: joinedSyndicate.id,
+                  warId: activeWar.warId,
+                  troops,
+                }, "WAR_ATTACK_OK").then(() => undefined),
+              );
+            }}
+          >
+            <Text style={{ color: "white", fontWeight: "700" }}>
+              {busyKey === "attack" ? "…" : "Launch attack"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {canManage && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>War shield</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {SHIELD_TYPES.map((s) => (
+              <TouchableOpacity
+                key={s}
+                style={[
+                  styles.pill,
+                  shieldType === s && styles.pillActive,
+                  { marginBottom: 4 },
+                ]}
+                onPress={() => setShieldType(s)}
+              >
+                <Text
+                  style={
+                    shieldType === s ? styles.pillTextActive : styles.pillText
+                  }
+                  numberOfLines={1}
+                >
+                  {s.replace(/_/g, " ")}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.depositBtn,
+              {
+                marginTop: 12,
+                alignSelf: "flex-start",
+                backgroundColor: "#032018",
+                paddingHorizontal: 16,
+              },
+            ]}
+            disabled={!!busyKey}
+            onPress={() =>
+              runAction("shield", () =>
+                syndicateWsCall("BUY_WAR_SHIELD", {
+                  syndicateId: joinedSyndicate.id,
+                  shieldType,
+                }, "BUY_WAR_SHIELD_OK").then(() => undefined),
+              )
+            }
+          >
+            <Text style={{ color: "white", fontWeight: "700" }}>
+              {busyKey === "shield" ? "…" : "Buy shield"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
 function IdolContent() {
+  const { joinedSyndicate } = useSyndicateStore();
+  const { dashboard, refetch } = useSyndicateDashboard();
+  const playerGold = useGameStore((s) => s.coins);
+  const [goldInput, setGoldInput] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const idolLevel = dashboard?.activeBoost?.idolLevel ?? 0;
+  const idolStatus = dashboard?.activeBoost?.idolStatus ?? "none";
+
+  const contributeGold = useDebounce(() => {
+    if (!joinedSyndicate || busy) return;
+    const goldAmount = parseInt(goldInput, 10);
+    if (!goldAmount || goldAmount <= 0) {
+      Alert.alert("Idol", "Enter a gold amount.");
+      return;
+    }
+    if (goldAmount > playerGold) {
+      Alert.alert("Idol", "Not enough personal gold.");
+      return;
+    }
+    setBusy(true);
+    void (async () => {
+      try {
+        await syndicateWsCall(
+          "IDOL_CONTRIBUTE",
+          {
+            syndicateId: joinedSyndicate.id,
+            goldAmount,
+            items: {},
+          },
+          "IDOL_CONTRIBUTE_OK",
+        );
+        setGoldInput("");
+        refetch();
+        Alert.alert("Idol", "Contribution sent.");
+      } catch (err) {
+        Alert.alert(
+          "Idol",
+          err instanceof Error ? err.message : "Contribution failed",
+        );
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, 500);
+
+  if (!joinedSyndicate) return null;
+
   return (
     <View style={styles.tabContainer}>
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Global Quota</Text>
-        <View style={{ marginTop: 14 }}>
-          <Text style={styles.quotaTitle}>Corn Harvest Mission</Text>
-          <View style={[styles.vaultMeterBg, { marginTop: 8 }]}>
-            <View
-              style={[
-                styles.vaultMeterFill,
-                { width: "42%", backgroundColor: "#71B312" },
-              ]}
-            />
+        <Text style={styles.cardTitle}>Idol status</Text>
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          <View style={[styles.pill, styles.pillActive]}>
+            <Text style={styles.pillTextActive}>Level {idolLevel}</Text>
           </View>
-          <View style={[styles.vaultLabels, { marginTop: 6 }]}>
-            <Text style={styles.vaultLabelText}>4,200 harvested</Text>
-            <Text style={styles.vaultLabelText}>10,000 goal</Text>
+          <View
+            style={[
+              styles.pill,
+              idolStatus === "blessed"
+                ? styles.pillActive
+                : idolStatus === "punished"
+                  ? {
+                      backgroundColor: "rgba(255,56,60,0.12)",
+                      borderColor: "rgba(255,56,60,0.35)",
+                    }
+                  : undefined,
+            ]}
+          >
+            <Text
+              style={
+                idolStatus === "blessed"
+                  ? styles.pillTextActive
+                  : idolStatus === "punished"
+                    ? { color: "#FF383C", fontWeight: "700", fontSize: 11 }
+                    : styles.pillText
+              }
+            >
+              {idolStatus === "blessed"
+                ? "Blessed"
+                : idolStatus === "punished"
+                  ? "Punished"
+                  : "Neutral"}
+            </Text>
           </View>
         </View>
+        <Text style={[styles.statSub, { marginTop: 14 }]}>
+          Contribute personal gold to level the idol and syndicate buffs.
+        </Text>
       </View>
 
-      <View
-        style={[
-          styles.card,
-          { backgroundColor: "#FF383C", borderColor: "transparent" },
-        ]}
-      >
-        <Text style={[styles.cardTitle, { color: "white" }]}>
-          Active Penalty
-        </Text>
-        <Text style={styles.penaltyText}>Market Tax: +5% (Quota Failed)</Text>
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Contribute gold</Text>
+        <Text style={[styles.reqLabel, { marginTop: 8 }]}>Amount</Text>
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+          <TextInput
+            style={[styles.inputField, { flex: 1, marginTop: 0 }]}
+            keyboardType="numeric"
+            value={goldInput}
+            onChangeText={setGoldInput}
+            placeholder={`You have ${playerGold.toLocaleString()}`}
+            placeholderTextColor="rgba(3,32,24,0.35)"
+          />
+          <TouchableOpacity
+            style={[
+              styles.depositBtn,
+              {
+                paddingHorizontal: 18,
+                backgroundColor: "#032018",
+                opacity: busy ? 0.5 : 1,
+              },
+            ]}
+            disabled={busy}
+            onPress={contributeGold}
+          >
+            <Text style={{ color: "white", fontWeight: "700" }}>
+              {busy ? "…" : "Send"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -2651,6 +3089,7 @@ const styles = StyleSheet.create({
 
   // ── TAB CONTENT
   tabContainer: { gap: 10 },
+  tabScroll: { flex: 1 },
 
   // ── CARD HEADER
   cardHeaderRow: {
