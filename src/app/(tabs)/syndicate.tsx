@@ -3,6 +3,7 @@ import { ScreenHeader } from "@/components/screen-header";
 import { SubTabs } from "@/components/sub-tabs";
 import { ThemedView } from "@/components/themed-view";
 import { useDebounce } from "@/hooks/use-debounce";
+import { applyDepositBankSuccess } from "@/services/state-sync";
 import { syndicateWsCall } from "@/services/syndicate-ws-client";
 import { websocketManager } from "@/services/websocket-manager";
 import { useGameStore } from "@/store/game-store";
@@ -1447,11 +1448,13 @@ function DashboardContent() {
 
 function BankContent() {
   const { joinedSyndicate, dashboard } = useSyndicateStore();
+  const { refetch: refetchSyndicateDashboard } = useSyndicateDashboard();
   const playerGold = useGameStore((s) => s.coins);
   const inventoryItems = useInventoryStore((s) => s.items);
 
   const [depositAmount, setDepositAmount] = useState("");
   const [depositingGold, setDepositingGold] = useState(false);
+  const [depositingItemId, setDepositingItemId] = useState<string | null>(null);
   const [sellingItem, setSellingItem] = useState<string | null>(null);
   const [sellQty, setSellQty] = useState("");
 
@@ -1482,79 +1485,66 @@ function BankContent() {
     }
 
     setDepositingGold(true);
-    const requestId = `dep-g-${Date.now().toString(36)}`;
-
-    const unsubscribe = websocketManager.onMessage((msg) => {
-      if (msg.type === "DEPOSIT_BANK_OK") {
-        unsubscribe();
-        setDepositingGold(false);
+    void (async () => {
+      try {
+        const data = await syndicateWsCall<Record<string, unknown>>(
+          "DEPOSIT_BANK",
+          {
+            syndicateId: joinedSyndicate.id,
+            kind: "gold",
+            amount,
+          },
+          "DEPOSIT_BANK_OK",
+        );
+        applyDepositBankSuccess(data, { kind: "gold", amount });
+        refetchSyndicateDashboard();
         setDepositAmount("");
-        Alert.alert("Deposited", `${amount} gold deposited to syndicate bank.`);
-      } else if (msg.type === "ERROR") {
-        const payload = msg.payload as Record<string, unknown> | undefined;
-        if (
-          payload?.requestId === requestId ||
-          msg.code === "INSUFFICIENT_GOLD"
-        ) {
-          unsubscribe();
-          setDepositingGold(false);
-          Alert.alert(
-            "Deposit Failed",
-            msg.message || "Could not deposit gold.",
-          );
-        }
+        Alert.alert(
+          "Deposited",
+          `${amount} gold deposited to syndicate bank.`,
+        );
+      } catch (err) {
+        Alert.alert(
+          "Deposit Failed",
+          err instanceof Error ? err.message : "Could not deposit gold.",
+        );
+      } finally {
+        setDepositingGold(false);
       }
-    });
-
-    void websocketManager.send(
-      "DEPOSIT_BANK",
-      {
-        requestId,
-        syndicateId: joinedSyndicate.id,
-        kind: "gold",
-        amount,
-      },
-      false,
-    );
+    })();
   }, 500);
 
   const handleDepositItem = useDebounce((itemId: string, qty: number) => {
     if (qty <= 0 || !joinedSyndicate) return;
 
-    const requestId = `dep-i-${Date.now().toString(36)}`;
-    const unsubscribe = websocketManager.onMessage((msg) => {
-      if (msg.type === "DEPOSIT_BANK_OK") {
-        unsubscribe();
+    setDepositingItemId(itemId);
+    void (async () => {
+      try {
+        const data = await syndicateWsCall<Record<string, unknown>>(
+          "DEPOSIT_BANK",
+          {
+            syndicateId: joinedSyndicate.id,
+            kind: "item",
+            itemId,
+            amount: qty,
+          },
+          "DEPOSIT_BANK_OK",
+        );
+        applyDepositBankSuccess(data, { kind: "item", itemId, qty });
+        refetchSyndicateDashboard();
         Alert.alert(
           "Deposited",
           `${qty}x ${formatItemName(itemId)} deposited.`,
         );
-      } else if (msg.type === "ERROR") {
-        const payload = msg.payload as Record<string, unknown> | undefined;
-        if (
-          payload?.requestId === requestId ||
-          msg.code === "INSUFFICIENT_INV"
-        ) {
-          unsubscribe();
-          Alert.alert(
-            "Deposit Failed",
-            msg.message || "Could not deposit items.",
-          );
-        }
+      } catch (err) {
+        Alert.alert(
+          "Deposit Failed",
+          err instanceof Error ? err.message : "Could not deposit items.",
+        );
+      } finally {
+        setDepositingItemId(null);
       }
-    });
-
-    void websocketManager.send(
-      "DEPOSIT_BANK",
-      {
-        requestId,
-        syndicateId: joinedSyndicate.id,
-        kind: "item",
-        itemId,
-        amount: qty,
-      },
-      false,
-    );
+    })();
   }, 500);
 
   const handleSellFromBank = useDebounce((itemId: string, quantity: number) => {
@@ -1636,10 +1626,11 @@ function BankContent() {
                   borderRadius: 13,
                   backgroundColor: "#032018",
                 },
-                depositingGold && { opacity: 0.5 },
+                (depositingGold || depositingItemId) && { opacity: 0.5 },
               ]}
               disabled={
                 depositingGold ||
+                depositingItemId != null ||
                 !depositAmount ||
                 parseInt(depositAmount, 10) <= 0
               }
@@ -1789,10 +1780,18 @@ function BankContent() {
                 </View>
                 <Text style={styles.depositQty}>x{item.quantity} owned</Text>
                 <TouchableOpacity
-                  style={styles.depositBtn}
+                  style={[
+                    styles.depositBtn,
+                    (depositingItemId === item.id || depositingGold) && {
+                      opacity: 0.45,
+                    },
+                  ]}
+                  disabled={depositingItemId === item.id || depositingGold}
                   onPress={() => handleDepositItem(item.id, item.quantity)}
                 >
-                  <Text style={styles.depositBtnText}>+</Text>
+                  <Text style={styles.depositBtnText}>
+                    {depositingItemId === item.id ? "…" : "+"}
+                  </Text>
                 </TouchableOpacity>
               </View>
             ))}

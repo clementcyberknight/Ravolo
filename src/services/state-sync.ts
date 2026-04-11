@@ -230,7 +230,8 @@ export function applyServerSync(rawData: unknown) {
   useGameStore.getState().setEconomyFromServer(economy);
 
   const inventory = extractInventory(data);
-  if (inventory) {
+  // `DEPOSIT_BANK_OK` often carries syndicate bank fields; do not replace player inventory from it.
+  if (inventory && messageType !== "DEPOSIT_BANK_OK") {
     useInventoryStore.getState().setInventoryFromServer(inventory);
   }
 
@@ -378,5 +379,61 @@ export function applyServerSync(rawData: unknown) {
     if (typeof data.goldPaid === "number") {
       useGameStore.getState().addCoins(Math.max(0, data.goldPaid));
     }
+  }
+}
+
+/**
+ * Applies local player economy/inventory after a confirmed `DEPOSIT_BANK_OK`.
+ * Responses often only include syndicate `bankGold`; when player fields are missing,
+ * falls back to subtracting the amounts from this deposit request.
+ */
+export function applyDepositBankSuccess(
+  data: unknown,
+  op:
+    | { kind: "gold"; amount: number }
+    | { kind: "item"; itemId: string; qty: number },
+): void {
+  const d = asRecord(data) ?? {};
+
+  if (op.kind === "gold") {
+    const playerGold =
+      parseNumber(d.newBalance) ??
+      parseNumber(d.playerGold) ??
+      parseNumber(d.goldBalance) ??
+      parseNumber(d.remainingGold) ??
+      parseNumber(d.personalGold) ??
+      parseNumber(asRecord(d.player)?.gold) ??
+      parseNumber(asRecord(d.player)?.coins) ??
+      parseNumber(asRecord(d.economy)?.gold) ??
+      parseNumber(asRecord(d.economy)?.coins);
+
+    if (playerGold !== undefined) {
+      useGameStore.getState().setEconomyFromServer({ coins: playerGold });
+    } else {
+      useGameStore.getState().removeCoins(op.amount);
+    }
+    return;
+  }
+
+  const remaining =
+    parseNumber(d.remainingAmount) ??
+    parseNumber(d.remaining) ??
+    parseNumber(d.newQuantity) ??
+    (typeof d[op.itemId] === "number" ? parseNumber(d[op.itemId]) : undefined);
+
+  if (remaining !== undefined) {
+    const current =
+      useInventoryStore.getState().items[op.itemId]?.quantity ?? 0;
+    useInventoryStore.getState().applyInventoryDelta(
+      op.itemId,
+      remaining - current,
+      inferInventoryType(op.itemId),
+    );
+  } else {
+    useInventoryStore.getState().applyInventoryDelta(
+      op.itemId,
+      -op.qty,
+      inferInventoryType(op.itemId),
+    );
   }
 }
