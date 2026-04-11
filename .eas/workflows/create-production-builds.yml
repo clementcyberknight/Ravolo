@@ -1,6 +1,6 @@
-name: Production APK Build
+name: Create Production Builds
 jobs:
-  build:
+  build_android:
     name: Build Android APK
     type: build
     params:
