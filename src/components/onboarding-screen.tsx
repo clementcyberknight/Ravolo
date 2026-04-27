@@ -66,10 +66,10 @@ type OnboardingChain = "solana" | "monad";
 export function OnboardingScreen() {
   const [index, setIndex] = useState(0);
   const [selectedChain, setSelectedChain] = useState<OnboardingChain>("solana");
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
   const [authMode, setAuthMode] = useState<
-    "authenticating" | "creating_wallet"
-  >("authenticating");
+    "selecting_network" | "authenticating" | "creating_wallet"
+  >("selecting_network");
   const completeOnboarding = useAppStore((state) => state.completeOnboarding);
   const setSeekerAuthenticated = useWalletStore(
     (state) => state.setSeekerAuthenticated,
@@ -109,11 +109,16 @@ export function OnboardingScreen() {
       return;
     }
 
-    if (isAuthenticating) {
+    if (modalVisible) {
       return;
     }
 
-    setIsAuthenticating(true);
+    setModalVisible(true);
+    handleStartAuth();
+  };
+
+  const handleStartAuth = async () => {
+    setAuthMode("authenticating");
     try {
       if (selectedChain === "monad") {
         const challenge = await getAuthChallenge({
@@ -196,8 +201,7 @@ export function OnboardingScreen() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error("[onboarding] auth failed:", message, error);
-    } finally {
-      setIsAuthenticating(false);
+      setModalVisible(false);
     }
   };
 
@@ -265,48 +269,6 @@ export function OnboardingScreen() {
             <ThemedText style={styles.description}>
               {currentSlide.description}
             </ThemedText>
-
-            {isLast ? (
-              <View style={styles.chainSection}>
-                <ThemedText style={styles.chainSectionTitle}>Network</ThemedText>
-                <View style={styles.chainRow}>
-                  <Pressable
-                    onPress={() => setSelectedChain("solana")}
-                    style={[
-                      styles.chainOption,
-                      selectedChain === "solana" && styles.chainOptionSelected,
-                    ]}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.chainOptionText,
-                        selectedChain === "solana" &&
-                          styles.chainOptionTextSelected,
-                      ]}
-                    >
-                      Solana
-                    </ThemedText>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setSelectedChain("monad")}
-                    style={[
-                      styles.chainOption,
-                      selectedChain === "monad" && styles.chainOptionSelected,
-                    ]}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.chainOptionText,
-                        selectedChain === "monad" &&
-                          styles.chainOptionTextSelected,
-                      ]}
-                    >
-                      Monad
-                    </ThemedText>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
           </Animated.View>
         </ScrollView>
 
@@ -339,7 +301,7 @@ export function OnboardingScreen() {
           <Pressable
             style={styles.nextButtonWrapper}
             onPress={handleNext}
-            disabled={isAuthenticating}
+            disabled={modalVisible}
           >
             <LinearGradient
               colors={["#0D631B", "#2E7D32"]}
@@ -354,9 +316,12 @@ export function OnboardingScreen() {
         </View>
       </View>
       <AuthenticatingModal
-        visible={isAuthenticating}
+        visible={modalVisible}
         mode={authMode}
-        chain={selectedChain === "monad" ? "monad" : "solana"}
+        chain={selectedChain}
+        onSelectChain={setSelectedChain}
+        onContinue={handleStartAuth}
+        onClose={() => setModalVisible(false)}
       />
     </ThemedView>
   );
@@ -442,42 +407,6 @@ const styles = StyleSheet.create({
     color: "#77574D",
     lineHeight: 29,
     fontWeight: "500",
-  },
-  chainSection: {
-    marginTop: 28,
-  },
-  chainSectionTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    color: "#032018",
-    marginBottom: 12,
-  },
-  chainRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  chainOption: {
-    flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 2,
-    borderColor: "#DEE5D6",
-    alignItems: "center",
-  },
-  chainOptionSelected: {
-    borderColor: "#0D631B",
-    backgroundColor: "rgba(13, 99, 27, 0.08)",
-  },
-  chainOptionText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#77574D",
-  },
-  chainOptionTextSelected: {
-    color: "#0D631B",
   },
   footer: {
     flexDirection: "row",

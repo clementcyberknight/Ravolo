@@ -2,6 +2,7 @@ import { Tabs } from "expo-router";
 import React from "react";
 import { View, StyleSheet, useColorScheme } from "react-native";
 import { ProfileHeader } from "@/components/profile-header";
+import { SynxedMiniPlayer } from "@/components/synxed-mini-player";
 import { Colors } from "@/constants/theme";
 import { Image } from "expo-image";
 
@@ -12,6 +13,7 @@ export default function TabsLayout() {
   return (
     <View style={{ flex: 1 }}>
       <ProfileHeader />
+      <SynxedMiniPlayer />
       <Tabs
         screenOptions={{
           headerShown: false,

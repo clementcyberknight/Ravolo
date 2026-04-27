@@ -367,7 +367,6 @@ export default function SyndicateChatScreen() {
           style={{ flex: 1 }}
           data={listData}
           renderItem={renderItem}
-          estimatedItemSize={88}
           keyExtractor={(item, index) =>
             item.kind === "help_request"
               ? item.requestId
