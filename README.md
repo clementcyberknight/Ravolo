@@ -24,7 +24,7 @@
 
 ## Key Features
 
-- **High-Frequency Performance:** Driven by heavily optimized WebSockets and Protobuf for blazing-fast payload transmission, minimal battery drain, and instant UI updates.
+- **High-Frequency Performance:** Driven by heavily optimized WebSockets and MessagePack (`msgpackr`) binary frames for blazing-fast payload transmission, minimal battery drain, and instant UI updates.
 - **FOMO Mechanics:** Crops wither if ignored. Animals get sad, then sick. A fleeting Black Market Trader forces players to log in regularly.
 - **Social & Economic Warfare:** Join Syndicates (Cartels) to manipulate market commodities, send gifts via P2P transfers, or coordinate protests against mega-rich farmers to trigger punishing tax decrees.
 - **Global Server Systems:** Watch the dynamic live leaderboard, contribute to massive global server bounties, and experience a progressive wealth tax that balances the economy.
@@ -37,13 +37,24 @@
 
 ## Tech Stack
 
-| Layer                | Technology                                     |
-| :------------------- | :--------------------------------------------- |
-| **Frontend**         | React Native (Expo SDK 54), TypeScript         |
-| **Persistence**      | WatermelonDB (SQLite)                          |
-| **Networking**       | high-frequency WebSockets + Protobuf           |
-| **State Management** | Zustand (Client) + TanStack Query (Server)     |
-| **Backend**          | Supabase (Postgres, Auth, RLS, Edge Functions) |
+| Layer                | Technology                                                              |
+| :------------------- | :---------------------------------------------------------------------- |
+| **Frontend**         | React Native (Expo SDK 54), TypeScript                                  |
+| **Persistence**      | WatermelonDB (SQLite)                                                   |
+| **Networking**       | high-frequency WebSockets + MessagePack (`msgpackr`, binary frames)     |
+| **State Management** | Zustand (Client) + TanStack Query (Server)                              |
+| **Backend**          | Bun (TypeScript strict) API/WS server + Worker, Redis + BullMQ, Supabase Postgres, Solana (`@solana/kit`) |
+
+## Backend (`ravolo-backend`)
+
+The game backend lives in [`../ravolo-backend`](../ravolo-backend) and runs on [Bun](https://bun.sh):
+
+- **API/WS Server** (`src/server.ts`) — `Bun.serve` HTTP + WebSocket, wallet auth (Ed25519 challenge/verify, JWT in Redis sessions), enqueues BullMQ jobs, reads prices from Redis.
+- **Worker** (`src/worker.ts`) — builds/signs/broadcasts sponsored Solana transactions, onboards users, syncs on-chain inventory, provisions offline nonce accounts.
+- **Realtime protocol** — binary-only WebSocket frames via `msgpackr` at `ws://<host>:<PORT>/api/ws?token=<jwt>`.
+- **Data** — Solana SPL tokens are the source of truth for assets; Redis caches inventory/prices/sessions; Supabase Postgres stores user profiles/audit; live BTC/SOL/XRP price ticks derive all commodity prices.
+
+Run both processes: `bun run dev:all` (see `ravolo-backend/README.md` for env setup).
 
 ## Getting Started
 
