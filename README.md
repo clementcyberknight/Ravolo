@@ -1,6 +1,26 @@
-# Ravolo 🌾🚜
+# Ravolo
 
-**Ravolo** is an addictive, high-frequency MMO farming simulator built for mobile platforms using Expo and React Native. The game emphasizes real-time micro-economies, strict time-management mechanics (FOMO), and dynamic player interactions.
+<p align="center">
+  <img src="./assets/onboarding-image/ravolo-logo.png" alt="Ravolo Logo" width="200" />
+</p>
+
+<p align="center">
+  <strong>Ravolo</strong> is an addictive, high-frequency MMO farming simulator built for mobile platforms using Expo and React Native. The game emphasizes real-time micro-economies, strict time-management mechanics (FOMO), and dynamic player interactions.
+</p>
+
+## Demo Gameplay
+
+| Farm Gameplay | App Home |
+| :---: | :---: |
+| ![Ravolo Game](./demo/ravolo%20game.jpg) | ![Ravolo App](./demo/ravolo%20app.jpg) |
+
+| Buy and Sell | Coop |
+| :---: | :---: |
+| ![Buy and Sell](./demo/buy%20and%20sell.jpg) | ![Coop](./demo/coop.jpg) |
+
+| Coxy | Test Build |
+| :---: | :---: |
+| ![Coxy](./demo/coxy.jpg) | ![Ravolo Test](./demo/ravolo%20test.jpg) |
 
 ## Key Features
 
@@ -10,12 +30,12 @@
 - **Global Server Systems:** Watch the dynamic live leaderboard, contribute to massive global server bounties, and experience a progressive wealth tax that balances the economy.
 - **Offline Capabilities:** Local-first architecture allows you to manage crops and animals on the go, synchronizing seamlessly with the server when reconnected.
 
-## 🚀 Documentation
+## Documentation
 
 - [**Detailed Architecture**](file:///c:/Users/NCC/Documents/ravolo/architecture.md): Deep dive into the local-first sync, WebSocket strategy, and anti-cheating measures.
 - [**Feature Roadmap**](file:///c:/Users/NCC/Documents/ravolo/features.md): Comprehensive list of all MMO and FOMO mechanics.
 
-## 🛠 Tech Stack
+## Tech Stack
 
 | Layer                | Technology                                     |
 | :------------------- | :--------------------------------------------- |
@@ -25,7 +45,7 @@
 | **State Management** | Zustand (Client) + TanStack Query (Server)     |
 | **Backend**          | Supabase (Postgres, Auth, RLS, Edge Functions) |
 
-## 🏁 Getting Started
+## Getting Started
 
 1. **Install dependencies**
 
