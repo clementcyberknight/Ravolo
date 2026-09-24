@@ -56,6 +56,14 @@ The game backend lives in [`../ravolo-backend`](../ravolo-backend) and runs on [
 
 Run both processes: `bun run dev:all` (see `ravolo-backend/README.md` for env setup).
 
+## Smart Contract (`ravolo_game`)
+
+On-chain game logic lives in [`../ravolo-backend/ravolo_game_onchain`](../ravolo-backend/ravolo_game_onchain) — an Anchor (0.30.1) program deployed on Solana devnet:
+
+- **Program ID:** `Bw3W1h7QF6iPDc9QsxUUne3khVoMnu6iHPLyKVk1uG8P`
+- **Modules:** admin/game config, treasury swap (buy/sell), marketplace listings, farming (buy plot, plant, harvest, clear wither), crafting (start/complete), animals (feed, collect, slaughter, breed), progression (XP, level-up), orders, tools/housing, syndicate vault, collateralized loans.
+- **Assets:** every seed, crop, animal product, tool, and crafted good is a real SPL token; user transactions are sponsored so players never pay gas.
+
 ## Getting Started
 
 1. **Install dependencies**
