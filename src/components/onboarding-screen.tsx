@@ -1,10 +1,7 @@
-import { useMobileWallet } from "@wallet-ui/react-native-web3js";
-import bs58 from "bs58";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,12 +14,12 @@ import Animated, {
   SlideOutDown,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import nacl from "tweetnacl";
 
 import { AuthenticatingModal } from "@/components/authenticating-modal";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { getAuthChallenge, verifyWalletSignature } from "@/services/auth-api";
+import { signAuthChallenge } from "@/services/sui-wallet-auth";
 import { websocketManager } from "@/services/websocket-manager";
 import { useAppStore } from "@/store/app-store";
 import { useAuthStore } from "@/store/auth-store";
@@ -66,28 +63,16 @@ export function OnboardingScreen() {
     "authenticating" | "creating_wallet"
   >("authenticating");
   const completeOnboarding = useAppStore((state) => state.completeOnboarding);
-  const setSeekerAuthenticated = useWalletStore(
-    (state) => state.setSeekerAuthenticated,
-  );
   const restoreLocalWallet = useWalletStore(
     (state) => state.restoreLocalWallet,
   );
   const createLocalWallet = useWalletStore((state) => state.createLocalWallet);
-  const getLocalWalletSecretKey = useWalletStore(
-    (state) => state.getLocalWalletSecretKey,
-  );
+  const getLocalKeypair = useWalletStore((state) => state.getLocalKeypair);
   const setSession = useAuthStore((state) => state.setSession);
-  const { account, connect, signMessage } = useMobileWallet();
   const insets = useSafeAreaInsets();
 
   const currentSlide = ONBOARDING_DATA[index];
   const isLast = index === ONBOARDING_DATA.length - 1;
-
-  const isSeekerDevice = () => {
-    const constants = Platform.constants as Record<string, unknown>;
-    const model = constants?.Model ?? constants?.model;
-    return model === "Seeker";
-  };
 
   const handleNext = async () => {
     if (!isLast) {
@@ -102,42 +87,28 @@ export function OnboardingScreen() {
     setIsAuthenticating(true);
     try {
       const challenge = await getAuthChallenge();
-      const challengePayload = new TextEncoder().encode(challenge.message);
+      const existingWallet = await restoreLocalWallet();
+      setAuthMode(existingWallet ? "authenticating" : "creating_wallet");
 
-      if (isSeekerDevice()) {
-        setAuthMode("authenticating");
-        const connectedAccount = account ?? (await connect());
-        const signatureBytes = await signMessage(challengePayload);
-        const authResult = await verifyWalletSignature({
-          wallet: connectedAccount.address.toBase58(),
-          signature: bs58.encode(signatureBytes),
-          challengeId: challenge.challengeId,
-        });
-
-        await setSession(authResult);
-        websocketManager.connect(authResult.accessToken);
-        setSeekerAuthenticated(true);
-      } else {
-        const existingWallet = await restoreLocalWallet();
-        setAuthMode(existingWallet ? "authenticating" : "creating_wallet");
-        const wallet = existingWallet ?? (await createLocalWallet());
-        const localSecretKey = await getLocalWalletSecretKey();
-        if (!localSecretKey) {
-          throw new Error("Local wallet private key is missing");
-        }
-
-        const signature = nacl.sign.detached(challengePayload, localSecretKey);
-        const authResult = await verifyWalletSignature({
-          wallet: wallet.address,
-          signature: bs58.encode(signature),
-          challengeId: challenge.challengeId,
-        });
-
-        await setSession(authResult);
-        websocketManager.connect(authResult.accessToken);
-        setSeekerAuthenticated(false);
+      const wallet = existingWallet ?? (await createLocalWallet());
+      const keypair = await getLocalKeypair();
+      if (!keypair) {
+        throw new Error("Local Sui wallet private key is missing");
       }
 
+      const signed = await signAuthChallenge(keypair, challenge.message);
+      if (signed.wallet !== wallet.address) {
+        throw new Error("Wallet address mismatch during sign-in");
+      }
+
+      const authResult = await verifyWalletSignature({
+        wallet: signed.wallet,
+        signature: signed.signature,
+        challengeId: challenge.challengeId,
+      });
+
+      await setSession(authResult);
+      websocketManager.connect(authResult.accessToken);
       completeOnboarding();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -1,17 +1,22 @@
 import { Image } from "expo-image";
-import React, { useMemo } from "react";
-import { ScrollView, StyleSheet, View, Dimensions, Platform, Pressable } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import React, { useMemo } from "react";
+import {
+  Dimensions,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { Colors, Fonts } from "@/constants/theme";
-import { useGameStore } from "@/store/game-store";
-import { useInventoryStore } from "@/store/inventory-store";
-import { useAuthStore } from "@/store/auth-store";
 import { websocketManager } from "@/services/websocket-manager";
 import { useAppStore } from "@/store/app-store";
+import { useAuthStore } from "@/store/auth-store";
+import { useGameStore } from "@/store/game-store";
+import { useInventoryStore } from "@/store/inventory-store";
 
 const FONT = "Space Mono";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -19,7 +24,6 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 // Assets
 const avatarImg = require("@/assets/image/assets_images_icons_misc_farmer_portrait.webp");
 const explorerBadge = require("@/assets/inapp-icons/Check-Badge--Streamline-Ultimate.png");
-const strongBadge = require("@/assets/inapp-icons/Check-Badge--Streamline-Ultimate.png"); // Reusing for mock
 const phoenixImg = require("@/assets/inapp-icons/home-tab-icons/Stat-2--Streamline-Rounded-Streamline-Material.png");
 
 const cropAssets: Record<string, any> = {
@@ -28,23 +32,32 @@ const cropAssets: Record<string, any> = {
   wheat: require("@/assets/image/assets_images_icons_crops_wheat.webp"),
 };
 
+function formatSuiAddress(address: string): string {
+  if (address.length <= 12) {
+    return address;
+  }
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
 // --- Sub-components ---
 
 function IconCircle({ children }: { children: React.ReactNode }) {
-  return (
-    <View style={styles.iconCircle}>
-      {children}
-    </View>
-  );
+  return <View style={styles.iconCircle}>{children}</View>;
 }
 
 function SectionTitle({ title }: { title: string }) {
-  return (
-    <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
-  );
+  return <ThemedText style={styles.sectionTitle}>{title}</ThemedText>;
 }
 
-function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function StatCard({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
     <View style={styles.statCard}>
       <IconCircle>{icon}</IconCircle>
@@ -67,40 +80,62 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const storeItems = useInventoryStore((state) => state.items);
+  const profile = useAuthStore((state) => state.profile);
   const logout = useAuthStore((state) => state.logout);
   const resetOnboarding = useAppStore((state) => state.resetOnboarding);
 
-  // Memoize playerData to prevent unnecessary downstream re-renders
-  const playerData = useMemo(() => ({
-    name: "clement-mars",
-    handle: "@clement___10",
-    level: level,
-    dailyTime: "1h 23m",
-    totalAsset: 50,
-    worldRank: 1050,
-    achievements: [
-      { id: "1", name: "Explorer", img: explorerBadge },
-      { id: "2", name: "Strong Arm", img: explorerBadge },
-    ],
-    clan: {
-      name: "Phoenix Order",
-      emblem: phoenixImg,
-      members: 42,
-      rank: 15,
-    },
-  }), [level]);
+  const playerData = useMemo(() => {
+    const walletAddress = profile?.walletAddress ?? "";
+    const displayName =
+      profile?.username ?? (walletAddress ? "Farmer" : "Guest");
+    const handle = walletAddress
+      ? formatSuiAddress(walletAddress)
+      : "Not connected";
+
+    const profileAchievements = (profile?.achievements ?? [])
+      .filter((item): item is string => typeof item === "string")
+      .map((name, index) => ({
+        id: `${name}-${index}`,
+        name,
+        img: explorerBadge,
+      }));
+
+    return {
+      name: displayName,
+      handle,
+      walletAddress,
+      level,
+      dailyTime: "1h 23m",
+      totalAsset: 50,
+      worldRank: 1050,
+      memberSince: profile?.createdAt
+        ? new Date(profile.createdAt).toLocaleDateString()
+        : null,
+      achievements:
+        profileAchievements.length > 0
+          ? profileAchievements
+          : [{ id: "new", name: "New Farmer", img: explorerBadge }],
+      clan: {
+        name: "Phoenix Order",
+        emblem: phoenixImg,
+        members: 42,
+        rank: 15,
+      },
+    };
+  }, [level, profile]);
 
   // Memoize inventory transformation to avoid infinite loop (unstable selector)
-  const inventory = useMemo(() => 
-    Object.entries(storeItems)
-      .map(([id, item]) => ({
-        id,
-        name: id.charAt(0).toUpperCase() + id.slice(1),
-        qty: item.quantity,
-        img: cropAssets[id] || cropAssets.wheat,
-      }))
-      .filter(item => item.qty > 0),
-    [storeItems]
+  const inventory = useMemo(
+    () =>
+      Object.entries(storeItems)
+        .map(([id, item]) => ({
+          id,
+          name: id.charAt(0).toUpperCase() + id.slice(1),
+          qty: item.quantity,
+          img: cropAssets[id] || cropAssets.wheat,
+        }))
+        .filter((item) => item.qty > 0),
+    [storeItems],
   );
 
   const handleLogout = async () => {
@@ -112,72 +147,100 @@ export default function ProfileScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ScrollView 
+      <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
         {/* Header Wave - Approximated with Views */}
         <View style={styles.headerContainer}>
-           <View style={styles.darkHeader} />
-           <View style={styles.waveLayer1} />
-           <View style={styles.waveLayer2} />
-           
-           {/* Back Button */}
-           <Pressable 
-             onPress={() => router.back()} 
-             style={[styles.backButton, { top: Math.max(insets.top, 20) }]}
-           >
-             <ThemedText style={styles.backButtonText}>✕</ThemedText>
-           </Pressable>
+          <View style={styles.darkHeader} />
+          <View style={styles.waveLayer1} />
+          <View style={styles.waveLayer2} />
 
-           {/* Logout Button */}
-           <Pressable
-             onPress={handleLogout}
-             style={[
-               styles.logoutButton,
-               { top: Math.max(insets.top, 20) },
-             ]}
-           >
-             <ThemedText style={styles.logoutButtonText}>LOG OUT</ThemedText>
-           </Pressable>
+          {/* Back Button */}
+          <Pressable
+            onPress={() => router.back()}
+            style={[styles.backButton, { top: Math.max(insets.top, 20) }]}
+          >
+            <ThemedText style={styles.backButtonText}>✕</ThemedText>
+          </Pressable>
+
+          {/* Logout Button */}
+          <Pressable
+            onPress={handleLogout}
+            style={[styles.logoutButton, { top: Math.max(insets.top, 20) }]}
+          >
+            <ThemedText style={styles.logoutButtonText}>LOG OUT</ThemedText>
+          </Pressable>
         </View>
 
         {/* Avatar Section */}
         <View style={styles.avatarSection}>
           <View style={styles.avatarWrapper}>
-            <Image 
-              source={avatarImg} 
-              style={styles.avatar} 
+            <Image
+              source={avatarImg}
+              style={styles.avatar}
               contentFit="cover"
             />
           </View>
           <ThemedText style={styles.playerName}>{playerData.name}</ThemedText>
-          <ThemedText style={styles.playerHandle}>{playerData.handle}</ThemedText>
+          <ThemedText style={styles.playerHandle}>
+            {playerData.handle}
+          </ThemedText>
+          {playerData.memberSince ? (
+            <ThemedText style={styles.memberSince}>
+              Member since {playerData.memberSince}
+            </ThemedText>
+          ) : null}
         </View>
 
         {/* Content */}
         <View style={styles.contentPadding}>
           {/* Stats Grid */}
           <View style={styles.statsGrid}>
-            <StatCard 
-              icon={<Image source={trophyIcon} style={{width: 18, height: 18}} contentFit="contain" />} 
-              label="Level" 
-              value={String(playerData.level)} 
+            <StatCard
+              icon={
+                <Image
+                  source={trophyIcon}
+                  style={{ width: 18, height: 18 }}
+                  contentFit="contain"
+                />
+              }
+              label="Level"
+              value={String(playerData.level)}
             />
-            <StatCard 
-              icon={<Image source={hourglassIcon} style={{width: 18, height: 18}} contentFit="contain" />} 
-              label="Daily Time" 
-              value={playerData.dailyTime} 
+            <StatCard
+              icon={
+                <Image
+                  source={hourglassIcon}
+                  style={{ width: 18, height: 18 }}
+                  contentFit="contain"
+                />
+              }
+              label="Daily Time"
+              value={playerData.dailyTime}
             />
-            <StatCard 
-              icon={<Image source={carrotIcon} style={{width: 18, height: 18}} contentFit="contain" />} 
-              label="Total Asset" 
-              value={String(playerData.totalAsset)} 
+            <StatCard
+              icon={
+                <Image
+                  source={carrotIcon}
+                  style={{ width: 18, height: 18 }}
+                  contentFit="contain"
+                />
+              }
+              label="Total Asset"
+              value={String(playerData.totalAsset)}
             />
-            <StatCard 
-              icon={<Image source={esportsIcon} style={{width: 18, height: 18}} contentFit="contain" />} 
-              label="World Rank" 
-              value={String(playerData.worldRank)} 
+            <StatCard
+              icon={
+                <Image
+                  source={esportsIcon}
+                  style={{ width: 18, height: 18 }}
+                  contentFit="contain"
+                />
+              }
+              label="World Rank"
+              value={String(playerData.worldRank)}
             />
           </View>
 
@@ -186,13 +249,23 @@ export default function ProfileScreen() {
             <SectionTitle title="Clan" />
             <View style={styles.card}>
               <View style={styles.clanEmblemWrapper}>
-                <Image source={playerData.clan.emblem} style={styles.clanEmblem} contentFit="contain" />
+                <Image
+                  source={playerData.clan.emblem}
+                  style={styles.clanEmblem}
+                  contentFit="contain"
+                />
               </View>
               <View style={styles.clanInfo}>
-                <ThemedText style={styles.clanName}>{playerData.clan.name}</ThemedText>
+                <ThemedText style={styles.clanName}>
+                  {playerData.clan.name}
+                </ThemedText>
                 <View style={styles.clanMeta}>
-                  <ThemedText style={styles.clanMetaText}>{playerData.clan.members} members</ThemedText>
-                  <ThemedText style={styles.clanMetaText}>Rank #{playerData.clan.rank}</ThemedText>
+                  <ThemedText style={styles.clanMetaText}>
+                    {playerData.clan.members} members
+                  </ThemedText>
+                  <ThemedText style={styles.clanMetaText}>
+                    Rank #{playerData.clan.rank}
+                  </ThemedText>
                 </View>
               </View>
             </View>
@@ -201,11 +274,21 @@ export default function ProfileScreen() {
           {/* Achievements */}
           <View style={styles.sectionMargin}>
             <SectionTitle title="Achievements" />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.hScroll}
+            >
               {playerData.achievements.map((a) => (
                 <View key={a.id} style={styles.achievementCard}>
-                  <Image source={a.img} style={styles.achievementImg} contentFit="contain" />
-                  <ThemedText style={styles.achievementName}>{a.name}</ThemedText>
+                  <Image
+                    source={a.img}
+                    style={styles.achievementImg}
+                    contentFit="contain"
+                  />
+                  <ThemedText style={styles.achievementName}>
+                    {a.name}
+                  </ThemedText>
                 </View>
               ))}
             </ScrollView>
@@ -217,14 +300,18 @@ export default function ProfileScreen() {
             <View style={styles.inventoryList}>
               {inventory.map((item) => (
                 <View key={item.id} style={[styles.card, styles.inventoryItem]}>
-                  <Image source={item.img} style={styles.itemImg} contentFit="contain" />
+                  <Image
+                    source={item.img}
+                    style={styles.itemImg}
+                    contentFit="contain"
+                  />
                   <ThemedText style={styles.itemName}>{item.name}</ThemedText>
                   <ThemedText style={styles.itemQty}>x{item.qty}</ThemedText>
                 </View>
               ))}
             </View>
           </View>
-          
+
           {/* Spacer for bottom tab bar */}
           <View style={{ height: 100 }} />
         </View>
@@ -302,6 +389,13 @@ const styles = StyleSheet.create({
     color: "#032018",
     fontSize: 14,
     opacity: 0.6,
+  },
+  memberSince: {
+    fontFamily: FONT,
+    color: "#032018",
+    fontSize: 12,
+    opacity: 0.5,
+    marginTop: 4,
   },
   contentPadding: {
     paddingHorizontal: 20,

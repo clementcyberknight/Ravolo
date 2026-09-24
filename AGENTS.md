@@ -31,6 +31,11 @@ You must prioritize:
 - WebSocket (primary communication)
 - REST (authentication only)
 - FlashList (for large lists/grids)
+- Sui (`@mysten/sui`) for wallet keys and personal-message signing
+
+## Sui SDK reference
+
+Every `@mysten/*` package ships LLM documentation in its `docs/` directory. When working with these packages, find the relevant docs by looking for `docs/llms-index.md` inside `node_modules/@mysten/*/`. Read the index first, then read the page you need.
 
 DO NOT use:
 

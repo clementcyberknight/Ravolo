@@ -14,8 +14,8 @@ export const AuthenticatingModal = ({
     mode === "creating_wallet" ? "Creating wallet" : "Authenticating";
   const subtitle =
     mode === "creating_wallet"
-      ? "Setting up your secure Solana wallet..."
-      : "Checking your device status...";
+      ? "Setting up your secure Sui wallet..."
+      : "Signing in with your Sui wallet...";
 
   return (
     <Modal visible={visible} transparent animationType="slide">
